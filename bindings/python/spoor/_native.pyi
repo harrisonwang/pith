@@ -36,4 +36,5 @@ def detect_format(
 def locate_quote(
     markdown: str,
     quote: str,
+    provenance_json: str | None,
 ) -> dict[str, Any] | None: ...

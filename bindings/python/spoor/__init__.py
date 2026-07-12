@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Any
 
@@ -155,7 +156,11 @@ def extract_media(
         raise SpoorError.from_native(error) from None
 
 
-def locate_quote(markdown: str, quote: str) -> LocatedQuote | None:
+def locate_quote(
+    markdown: str,
+    quote: str,
+    provenance: Provenance | list[dict[str, Any]] | None = None,
+) -> LocatedQuote | None:
     """Ground an LLM-cited quote in Markdown spoor produced.
 
     Tries four deterministic tiers, strictest first: exact substring,
@@ -168,8 +173,17 @@ def locate_quote(markdown: str, quote: str) -> LocatedQuote | None:
     ``result.span`` indexes ``markdown`` as a Python ``str``:
     ``markdown[span["start"]:span["end"]]`` is the raw hit. ``result.page`` is
     read from spoor's own ``## Page N`` markers when present.
+
+    Pass ``provenance`` (the ``result.provenance`` of the same parse, or its
+    ``spans`` list) to also fill ``result.anchor`` with the source anchor of
+    the best-overlapping span — with block-level provenance that is the
+    quote's approximate box on its source page.
     """
-    raw = _native.locate_quote(markdown, quote)
+    spans_json: str | None = None
+    if provenance is not None:
+        spans = getattr(provenance, "spans", provenance)
+        spans_json = json.dumps(spans)
+    raw = _native.locate_quote(markdown, quote, spans_json)
     if raw is None:
         return None
     return LocatedQuote(
@@ -179,6 +193,7 @@ def locate_quote(markdown: str, quote: str) -> LocatedQuote | None:
         after=raw["after"],
         page=raw["page"],
         method=raw["method"],
+        anchor=raw.get("anchor"),
     )
 
 

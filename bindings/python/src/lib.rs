@@ -81,16 +81,29 @@ fn extract_media<'py>(
 /// the hit's span, collapsed context, source page, and match method, or `None`
 /// when no deterministic tier matches — the claim the quote backs is then
 /// unverifiable. The span indexes `markdown` as a Python `str`.
-#[pyfunction(signature = (markdown, quote))]
-fn locate_quote(py: Python<'_>, markdown: &str, quote: &str) -> PyResult<Py<PyAny>> {
-    let Some(found) = py.detach(|| spoor_core::locate_quote(markdown, quote)) else {
+#[pyfunction(signature = (markdown, quote, provenance_json=None))]
+fn locate_quote(
+    py: Python<'_>,
+    markdown: &str,
+    quote: &str,
+    provenance_json: Option<&str>,
+) -> PyResult<Py<PyAny>> {
+    // The wrapper passes provenance spans as JSON so new anchor kinds flow
+    // through without another marshalling layer.
+    let spans: Vec<spoor_core::ProvenanceSpan> = match provenance_json {
+        Some(json) => serde_json::from_str(json)
+            .map_err(|error| SpoorError::new_err(format!("provenance 参数无效：{error}")))?,
+        None => Vec::new(),
+    };
+    let Some(found) = py.detach(|| spoor_core::locate_quote_grounded(markdown, quote, &spans))
+    else {
         return Ok(py.None());
     };
     // Core spans are UTF-8 byte offsets; convert to Python str indices so
     // `markdown[start:end]` slices the hit directly.
     let start = markdown[..found.span.start].chars().count();
     let end = start + markdown[found.span.start..found.span.end].chars().count();
-    let value = serde_json::json!({
+    let mut value = serde_json::json!({
         "before": found.before,
         "hit": found.hit,
         "after": found.after,
@@ -98,6 +111,10 @@ fn locate_quote(py: Python<'_>, markdown: &str, quote: &str) -> PyResult<Py<PyAn
         "page": found.page,
         "method": found.method.as_str(),
     });
+    if let Some(anchor) = &found.anchor {
+        value["anchor"] =
+            serde_json::to_value(anchor).map_err(|error| SpoorError::new_err(error.to_string()))?;
+    }
     value_to_python(py, &value)
 }
 

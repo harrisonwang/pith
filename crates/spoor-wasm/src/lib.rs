@@ -109,7 +109,11 @@ pub fn extract_media(
 /// string (UTF-16 code units), so `markdown.slice(span.start, span.end)` is
 /// the raw hit; `page` comes from spoor's own `## Page N` markers when present.
 #[wasm_bindgen]
-pub fn locate_quote(markdown: &str, quote: &str) -> Result<JsValue, JsValue> {
+pub fn locate_quote(
+    markdown: &str,
+    quote: &str,
+    provenance_spans: JsValue,
+) -> Result<JsValue, JsValue> {
     #[derive(serde::Serialize)]
     struct Span {
         start: usize,
@@ -123,9 +127,21 @@ pub fn locate_quote(markdown: &str, quote: &str) -> Result<JsValue, JsValue> {
         span: Span,
         page: Option<usize>,
         method: &'static str,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        anchor: &'a Option<spoor_core::SourceAnchor>,
     }
 
-    let Some(found) = spoor_core::locate_quote(markdown, quote) else {
+    // Pass the same `provenance.spans` array a parse returned (byte offsets
+    // as-is) to also get the hit's source anchor back.
+    let spans: Vec<spoor_core::ProvenanceSpan> =
+        if provenance_spans.is_undefined() || provenance_spans.is_null() {
+            Vec::new()
+        } else {
+            serde_wasm_bindgen::from_value(provenance_spans)
+                .map_err(|error| JsValue::from_str(&format!("provenance 参数无效:{error}")))?
+        };
+
+    let Some(found) = spoor_core::locate_quote_grounded(markdown, quote, &spans) else {
         return Ok(JsValue::NULL);
     };
     // Core spans are UTF-8 byte offsets; convert to UTF-16 code units.
@@ -141,6 +157,7 @@ pub fn locate_quote(markdown: &str, quote: &str) -> Result<JsValue, JsValue> {
         span: Span { start, end },
         page: found.page,
         method: found.method.as_str(),
+        anchor: &found.anchor,
     };
     serde_wasm_bindgen::to_value(&located).map_err(|error| JsValue::from_str(&error.to_string()))
 }

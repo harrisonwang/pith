@@ -27,7 +27,7 @@ pub use json_schema::{
     a1_range, cells_to_values,
 };
 pub use limits::{DEFAULT_MAX_PARSE_BYTES, MIN_MAX_PARSE_BYTES};
-pub use locate::{LocateMethod, LocatedQuote, Locator, locate_quote};
+pub use locate::{LocateMethod, LocatedQuote, Locator, locate_quote, locate_quote_grounded};
 pub use render::{
     DEFAULT_MAX_OUTPUT_BYTES, LimitedOutput, MIN_MAX_OUTPUT_BYTES, OutputMode, default_mode_for,
     limit_markdown_output, render_documents, render_json, render_json_limited,

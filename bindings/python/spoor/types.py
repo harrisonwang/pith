@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Literal, TypedDict
+from typing import Any, Literal, TypedDict, NotRequired
 
 WarningCode = Literal[
     "pdf_page_no_text_layer",
@@ -88,6 +88,16 @@ class LocatedQuote:
     after: str
     page: int | None
     method: LocateMethod
+    anchor: SourceAnchor | None = None
+
+
+class Rect(TypedDict):
+    """Approximate box in PDF-native user space (y-up, /MediaBox system)."""
+
+    x0: float
+    y0: float
+    x1: float
+    y1: float
 
 
 class SourceAnchor(TypedDict):
@@ -95,6 +105,7 @@ class SourceAnchor(TypedDict):
 
     kind: Literal["page"]
     number: int
+    bbox: NotRequired[Rect]
 
 
 class ProvenanceSpan(TypedDict):

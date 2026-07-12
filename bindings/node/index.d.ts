@@ -18,7 +18,7 @@ export declare function extractMedia(data: Buffer, resource: string, options?: P
  * string (UTF-16 code units), so `markdown.slice(span.start, span.end)` is
  * the raw hit; `page` comes from spoor's own `## Page N` markers when present.
  */
-export declare function locateQuote(markdown: string, quote: string): any
+export declare function locateQuote(markdown: string, quote: string, provenanceSpans?: any | undefined | null): any
 
 export declare function parseBytes(data: Buffer, options?: ParseOptions | undefined | null): any
 

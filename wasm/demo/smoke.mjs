@@ -204,3 +204,17 @@ assert.ok(convertedHit.hit.includes('777102'));
 
 assert.equal(locate_quote(locateMd, '海外收入 9999 亿'), null);
 assert.equal(locate_quote(locateMd, ''), null);
+
+// Grounded locate: pass the block-level provenance spans back and the hit
+// carries its source anchor (page + approximate box).
+const groundedParse = parse_bytes(
+  multipagePdf, 'doc.pdf', undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, 'block',
+);
+const groundedMd = groundedParse.content.value.markdown;
+const groundedHit = locate_quote(
+  groundedMd, 'Page 2 content begins here.', groundedParse.provenance.spans,
+);
+assert.equal(groundedHit.anchor.kind, 'page');
+assert.equal(groundedHit.anchor.number, 2);
+assert.ok(groundedHit.anchor.bbox.y1 > groundedHit.anchor.bbox.y0);
+assert.equal(locate_quote(groundedMd, 'Page 2 content begins here.').anchor, undefined);

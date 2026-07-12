@@ -253,3 +253,23 @@ def test_block_provenance_carries_line_boxes() -> None:
     assert text.strip()
     bbox = first["source"]["bbox"]
     assert bbox["y1"] > bbox["y0"] and bbox["x1"] > bbox["x0"]
+
+
+def test_locate_quote_grounded_returns_block_anchor() -> None:
+    # Verify a quote, then ground it to its source box via block provenance.
+    result = parse_path(FIXTURES / "pdf/09_outline.pdf", provenance="block")
+    markdown = result.content.value.markdown
+    found = locate_quote(
+        markdown,
+        "Opening prose that follows the first heading.",
+        provenance=result.provenance,
+    )
+    assert found is not None
+    assert found.anchor is not None
+    assert found.anchor["kind"] == "page"
+    assert found.anchor["number"] == 1
+    bbox = found.anchor["bbox"]
+    assert bbox["y1"] > bbox["y0"] and bbox["x1"] > bbox["x0"]
+    # Without provenance the anchor stays absent.
+    plain = locate_quote(markdown, "Opening prose that follows the first heading.")
+    assert plain is not None and plain.anchor is None

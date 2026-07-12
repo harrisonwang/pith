@@ -75,9 +75,22 @@ pub fn extract_media(
 /// string (UTF-16 code units), so `markdown.slice(span.start, span.end)` is
 /// the raw hit; `page` comes from spoor's own `## Page N` markers when present.
 #[napi]
-pub fn locate_quote(markdown: String, quote: String) -> serde_json::Value {
-    let Some(found) = spoor_core::locate_quote(&markdown, &quote) else {
-        return serde_json::Value::Null;
+pub fn locate_quote(
+    markdown: String,
+    quote: String,
+    provenance_spans: Option<serde_json::Value>,
+) -> Result<serde_json::Value> {
+    let spans: Vec<spoor_core::ProvenanceSpan> = match provenance_spans {
+        Some(value) => serde_json::from_value(value).map_err(|error| {
+            Error::new(
+                Status::InvalidArg,
+                format!("provenanceSpans 参数无效：{error}"),
+            )
+        })?,
+        None => Vec::new(),
+    };
+    let Some(found) = spoor_core::locate_quote_grounded(&markdown, &quote, &spans) else {
+        return Ok(serde_json::Value::Null);
     };
     // Core spans are UTF-8 byte offsets; convert to UTF-16 code units.
     let start = markdown[..found.span.start].encode_utf16().count();
@@ -85,14 +98,19 @@ pub fn locate_quote(markdown: String, quote: String) -> serde_json::Value {
         + markdown[found.span.start..found.span.end]
             .encode_utf16()
             .count();
-    serde_json::json!({
+    let mut value = serde_json::json!({
         "before": found.before,
         "hit": found.hit,
         "after": found.after,
         "span": {"start": start, "end": end},
         "page": found.page,
         "method": found.method.as_str(),
-    })
+    });
+    if let Some(anchor) = &found.anchor {
+        value["anchor"] = serde_json::to_value(anchor)
+            .map_err(|error| Error::new(Status::GenericFailure, error.to_string()))?;
+    }
+    Ok(value)
 }
 
 #[napi]

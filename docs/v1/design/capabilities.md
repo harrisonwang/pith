@@ -93,9 +93,10 @@ Rust、Python、Node、WASM 均通过同一个 `ParseResult.warnings` 契约获�
 `locate_quote(markdown, quote)`（Rust/Python/Node/WASM 同名导出，Rust 另有可复用
 `Locator`）在 spoor 产出的 Markdown 中定位模型引文，依次尝试四档确定性匹配：
 精确子串、忽略空白、表格单元格锚点、数值/单位换算。命中返回 span、上下文、页码
-与所用档位；四档全部落空时调用方应把对应结论按"无法核验"处理。它与 provenance
-（`--provenance page`）共同构成"引用 → 输出位置 → 源页码"的溯源链路；块级/坐标级
-锚点见 [provenance.md](provenance.md) 的 M2/M3 规划。
+与所用档位；四档全部落空时调用方应把对应结论按"无法核验"处理。把同一次解析的
+`provenance.spans` 传入 `locate_quote_grounded`（四宿主同构），命中附带来源锚点：
+page 级给页码、block 级给"源页 + 近似坐标框"——"引用 → 输出位置 → 源页坐标"的
+溯源闭环已经打通；线性/表格锚点见 [provenance.md](provenance.md) 的 M3 规划。
 
 ## 调研能力决策
 

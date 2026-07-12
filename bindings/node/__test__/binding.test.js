@@ -213,3 +213,20 @@ test('block provenance carries line boxes and page-anchored gaps', (t) => {
   assert.ok(text.trim().length > 0);
   assert.ok(first.source.bbox.y1 > first.source.bbox.y0);
 });
+
+test('locateQuote grounds a hit to its block anchor when provenance is passed', (t) => {
+  const pdf = readFileSync(join(
+    __dirname,
+    '../../../crates/spoor-cli/tests/fixtures/pdf/09_outline.pdf',
+  ));
+  const result = parseBytes(pdf, { sourceName: 'doc.pdf', provenance: 'block' });
+  const md = result.content.value.markdown;
+
+  const grounded = locateQuote(md, 'Second page prose paragraph.', result.provenance.spans);
+  assert.equal(grounded.anchor.kind, 'page');
+  assert.equal(grounded.anchor.number, 2);
+  assert.ok(grounded.anchor.bbox.y1 > grounded.anchor.bbox.y0);
+
+  const plain = locateQuote(md, 'Second page prose paragraph.');
+  assert.equal(plain.anchor, undefined);
+});

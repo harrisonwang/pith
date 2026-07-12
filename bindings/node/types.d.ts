@@ -122,6 +122,12 @@ export interface LocatedQuote {
   /** 1-based source page from spoor's `## Page N` markers; null without them. */
   page: number | null;
   method: LocateMethod;
+  /**
+   * Source anchor of the provenance span overlapping the hit the most; only
+   * present when `provenanceSpans` was passed. With block-level provenance
+   * `bbox` is the quote's approximate box in PDF-native user space.
+   */
+  anchor?: { kind: 'page'; number: number; bbox?: { x0: number; y0: number; x1: number; y1: number } };
 }
 
 export interface SpoorError extends Error {
@@ -136,4 +142,8 @@ export interface SpoorError extends Error {
 export function detectFormat(data: Buffer, sourceName?: string | null): string;
 export function parseBytes(data: Buffer, options?: ParseOptions | null): ParseResult;
 export function extractMedia(data: Buffer, resource: string, options?: ParseOptions | null): Buffer;
-export function locateQuote(markdown: string, quote: string): LocatedQuote | null;
+export function locateQuote(
+  markdown: string,
+  quote: string,
+  provenanceSpans?: Provenance['spans'] | null,
+): LocatedQuote | null;

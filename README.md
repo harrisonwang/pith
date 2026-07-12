@@ -117,6 +117,10 @@ WASM 包默认包含全部重点格式；
 说明原文没有这句话，调用方应把对应结论按"无法核验"处理，而不是相信模型的自引。
 Rust 的 `span` 是 UTF-8 字节区间，Python/Node/WASM 返回各自语言的字符串下标，
 直接切片即得命中原文；Rust 侧可用 `Locator` 对同一文档核验多条引文而只建一次索引。
+把同一次解析返回的 `provenance.spans` 一并传入（Rust `locate_quote_grounded`，
+Python `provenance=`、Node/WASM 第三参），命中会附带来源锚点 `anchor`——配合
+`--provenance block`，核验通过的引文直接得到"源页 + 近似坐标框"，可交给 PDF.js
+在原 PDF 上画高亮。
 
 主示例：
 

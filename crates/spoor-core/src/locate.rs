@@ -22,7 +22,7 @@
 //! should treat the claim it backs as unverifiable instead of trusting the
 //! model's self-citation. `None` is that signal, not an error.
 
-use crate::result::TextRange;
+use crate::result::{ProvenanceSpan, SourceAnchor, TextRange};
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
@@ -83,6 +83,12 @@ pub struct LocatedQuote {
     /// Markdown carries them (PDF output); `None` otherwise.
     pub page: Option<usize>,
     pub method: LocateMethod,
+    /// The source anchor whose provenance span overlaps the hit the most,
+    /// when the caller supplied the document's provenance spans (see
+    /// [`Locator::locate_grounded`]); block-level spans put an approximate
+    /// page box here, turning a verified quote into a highlight target.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub anchor: Option<SourceAnchor>,
 }
 
 /// Locate `quote` inside `markdown`. Convenience wrapper over [`Locator`] for
@@ -90,6 +96,19 @@ pub struct LocatedQuote {
 /// document without re-indexing it.
 pub fn locate_quote(markdown: &str, quote: &str) -> Option<LocatedQuote> {
     Locator::new(markdown).locate(quote)
+}
+
+/// Like [`locate_quote`], but also resolves the hit against the document's
+/// provenance spans (as returned by `parse` with `ProvenanceLevel::Page` or
+/// `Block`), filling [`LocatedQuote::anchor`] with the best-overlapping
+/// span's source. With block-level provenance this grounds a verified quote
+/// to an approximate box on its source page.
+pub fn locate_quote_grounded(
+    markdown: &str,
+    quote: &str,
+    spans: &[ProvenanceSpan],
+) -> Option<LocatedQuote> {
+    Locator::new(markdown).locate_grounded(quote, spans)
 }
 
 /// Reusable matcher over one Markdown string. Construction builds the
@@ -148,7 +167,29 @@ impl<'a> Locator<'a> {
             after: context_after(self.md, end),
             page: page_of(self.md, start),
             method,
+            anchor: None,
         })
+    }
+
+    /// [`Locator::locate`], then resolve the hit against `spans` — the
+    /// provenance spans of the same Markdown — attaching the source anchor of
+    /// the span the hit overlaps the most. A hit crossing a line boundary
+    /// overlaps several block-level spans; the dominant one wins.
+    pub fn locate_grounded(&self, quote: &str, spans: &[ProvenanceSpan]) -> Option<LocatedQuote> {
+        let mut found = self.locate(quote)?;
+        found.anchor = spans
+            .iter()
+            .filter_map(|span| {
+                let overlap = span
+                    .output
+                    .end
+                    .min(found.span.end)
+                    .saturating_sub(span.output.start.max(found.span.start));
+                (overlap > 0).then_some((overlap, span))
+            })
+            .max_by_key(|(overlap, _)| *overlap)
+            .map(|(_, span)| span.source.clone());
+        Some(found)
     }
 
     /// Tiers 1–2: exact substring, then whitespace-insensitive.
@@ -709,5 +750,56 @@ mod tests {
         // Slicing at the reported offsets must not split a UTF-8 char.
         let slice = &TABLE_MD[found.span.start..found.span.end];
         assert_eq!(collapse_whitespace(slice), found.hit);
+    }
+
+    #[test]
+    fn grounded_hit_attaches_best_overlapping_anchor() {
+        use crate::result::{ProvenanceSpan, Rect, SourceAnchor, TextRange};
+        let md = "## Page 1\n\nRevenue grew 12% in Q1.";
+        let line_start = md.find("Revenue").expect("line");
+        let spans = vec![
+            ProvenanceSpan {
+                output: TextRange {
+                    start: 0,
+                    end: line_start,
+                },
+                source: SourceAnchor::Page {
+                    number: 1,
+                    bbox: None,
+                },
+            },
+            ProvenanceSpan {
+                output: TextRange {
+                    start: line_start,
+                    end: md.len(),
+                },
+                source: SourceAnchor::Page {
+                    number: 1,
+                    bbox: Some(Rect {
+                        x0: 72.0,
+                        y0: 700.0,
+                        x1: 300.0,
+                        y1: 715.0,
+                    }),
+                },
+            },
+        ];
+
+        let found = locate_quote_grounded(md, "Revenue grew 12%", &spans).expect("hit");
+        let Some(SourceAnchor::Page {
+            number,
+            bbox: Some(bbox),
+        }) = found.anchor
+        else {
+            panic!("expected boxed page anchor: {:?}", found.anchor);
+        };
+        assert_eq!(number, 1);
+        assert!((bbox.x0 - 72.0).abs() < f32::EPSILON);
+
+        // Without spans the anchor stays empty and serialization omits it.
+        let plain = locate_quote(md, "Revenue grew 12%").expect("hit");
+        assert_eq!(plain.anchor, None);
+        let json = serde_json::to_value(&plain).expect("serialize");
+        assert!(json.get("anchor").is_none());
     }
 }
