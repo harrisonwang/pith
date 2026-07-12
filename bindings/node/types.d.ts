@@ -73,8 +73,18 @@ export interface TextRange {
   end: number;
 }
 
-/** Where a span of output came from. Currently page-oriented (PDF). */
-export type SourceAnchor = { kind: 'page'; number: number };
+/** Approximate box in PDF-native user space (y-up, /MediaBox system). */
+export interface AnchorRect { x0: number; y0: number; x1: number; y1: number }
+
+/**
+ * Where a span of output came from: a PDF page (block level adds an
+ * approximate box), a linear input byte range (plain text / Markdown), or a
+ * table cell of the document-mode CSV/XLSX rendering.
+ */
+export type SourceAnchor =
+  | { kind: 'page'; number: number; bbox?: AnchorRect }
+  | { kind: 'input'; start: number; end: number }
+  | { kind: 'cell'; row: number; column: string; sheet?: string };
 
 export interface ProvenanceSpan {
   output: TextRange;
@@ -125,9 +135,9 @@ export interface LocatedQuote {
   /**
    * Source anchor of the provenance span overlapping the hit the most; only
    * present when `provenanceSpans` was passed. With block-level provenance
-   * `bbox` is the quote's approximate box in PDF-native user space.
+   * a PDF hit carries its approximate box, a table hit its cell.
    */
-  anchor?: { kind: 'page'; number: number; bbox?: { x0: number; y0: number; x1: number; y1: number } };
+  anchor?: SourceAnchor;
 }
 
 export interface SpoorError extends Error {

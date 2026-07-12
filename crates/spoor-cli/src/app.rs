@@ -55,13 +55,16 @@ fn run_provenance(cli: Cli) -> Result<String> {
     request.provenance = level;
 
     let format = detect_format(&request)?;
-    // Page-level provenance only exists for PDF (the only paged format). Every
-    // other format — tables and reflowable documents like DOCX alike — gets one
-    // clear error instead of tables erroring while DOCX silently returned no
-    // provenance.
-    if !matches!(format, Format::Pdf) {
+    // Provenance exists for PDF (page/line anchors), linear formats (input
+    // byte ranges) and tables (cell anchors, block level). Reflowable
+    // documents (DOCX/PPTX/HTML/EPUB/IPYNB) have no mapping yet and get one
+    // clear error instead of silently returning none.
+    if !matches!(
+        format,
+        Format::Pdf | Format::PlainText | Format::Markdown | Format::Csv | Format::Xlsx
+    ) {
         return Err(anyhow!(
-            "--provenance page 仅 PDF 支持（按页定位）；当前格式为 {format}。"
+            "--provenance 支持 PDF（页/行级）、纯文本/Markdown（输入区间）与 CSV/XLSX（单元格，仅 block）；当前格式为 {format}。"
         ));
     }
 

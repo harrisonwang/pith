@@ -1,10 +1,12 @@
-use crate::engine::TableFilter;
+use crate::engine::{ProvenanceLevel, TableFilter};
 use crate::json_schema::{
     HeaderInfo, PreambleInfo, RowRange, TableEntry, a1_range, cells_to_values,
 };
 use crate::limits;
-use crate::output::{gfm_table, gfm_table_size};
+use crate::output::{gfm_table_size, gfm_table_with_spans};
+use crate::parse::ExtractedMarkdown;
 use crate::parse::csv::validate_columns;
+use crate::parse::table_provenance::cell_spans;
 use crate::source::Source;
 use anyhow::{Context, Result, anyhow};
 use calamine::{Data, Reader, Xlsx, open_workbook_from_rs};
@@ -13,7 +15,11 @@ use std::io::Cursor;
 
 const DEFAULT_PREVIEW_ROWS: usize = 100;
 
-pub fn extract(source: &Source<'_>, max_parse_bytes: usize) -> Result<String> {
+pub fn extract(
+    source: &Source<'_>,
+    max_parse_bytes: usize,
+    provenance: ProvenanceLevel,
+) -> Result<ExtractedMarkdown> {
     drop(limits::open_zip_archive(
         source.bytes(),
         "xlsx",
@@ -23,6 +29,7 @@ pub fn extract(source: &Source<'_>, max_parse_bytes: usize) -> Result<String> {
     let mut wb: Xlsx<_> = open_workbook_from_rs(cursor).context("failed to open xlsx")?;
 
     let mut out = String::new();
+    let mut spans = Vec::new();
     let names = wb.sheet_names();
 
     for name in &names {
@@ -61,10 +68,24 @@ pub fn extract(source: &Source<'_>, max_parse_bytes: usize) -> Result<String> {
             "XLSX Markdown rendering",
         )?;
         out.push_str(&prefix);
-        out.push_str(&gfm_table(&table_rows));
+        let (table, rendered_cells) = gfm_table_with_spans(&table_rows);
+        if matches!(provenance, ProvenanceLevel::Block) {
+            spans.extend(cell_spans(
+                &table_rows,
+                &rendered_cells,
+                out.len(),
+                Some(name.as_str()),
+            ));
+        }
+        out.push_str(&table);
     }
 
-    Ok(out)
+    Ok(ExtractedMarkdown {
+        markdown: out,
+        warnings: Vec::new(),
+        page_count: None,
+        provenance: spans,
+    })
 }
 
 pub fn extract_table_entries(

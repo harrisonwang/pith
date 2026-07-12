@@ -1,9 +1,10 @@
+use spoor_core::parse_document_result;
 use spoor_core::{
-    DocumentFilter, ErrorCode, Format, ParseContent, ParseLimits, ParseRequest, TableFilter,
-    detect_format, extract_media, parse,
+    DocumentFilter, ErrorCode, Format, ParseContent, ParseLimits, ParseRequest, ProvenanceLevel,
+    SourceAnchor, TableFilter, detect_format, extract_media, parse,
 };
 #[cfg(feature = "pdf")]
-use spoor_core::{WarningCode, WarningLocation, parse_document_result};
+use spoor_core::{WarningCode, WarningLocation};
 
 #[test]
 fn bytes_only_document_api_returns_typed_result() {
@@ -267,12 +268,28 @@ fn page_provenance_follows_the_page_slice() {
 }
 
 #[test]
-fn page_provenance_is_empty_for_non_paged_formats() {
-    use spoor_core::ProvenanceLevel;
-    // Requesting page provenance on a format with no page model yields no
-    // mapping rather than a bogus one.
+fn page_provenance_maps_linear_formats_to_one_input_span() {
+    // Linear formats have no page model; page level gives one coarse
+    // whole-document span anchored at the input byte range instead.
     let mut request = ParseRequest::new(b"hello\n");
     request.source_name = Some("note.txt");
+    request.provenance = ProvenanceLevel::Page;
+    let spans = parse(&request)
+        .unwrap()
+        .provenance
+        .expect("linear provenance")
+        .spans;
+    assert_eq!(spans.len(), 1);
+    assert_eq!(spans[0].source, SourceAnchor::Input { start: 0, end: 6 });
+}
+
+#[test]
+fn page_provenance_is_empty_for_reflowable_formats() {
+    // Reflowable documents (DOCX etc.) still have no mapping; requesting one
+    // yields none rather than a bogus anchor. HTML has no linear identity.
+    let html = b"<html><body><p>hi</p></body></html>";
+    let mut request = ParseRequest::new(html);
+    request.source_name = Some("page.html");
     request.provenance = ProvenanceLevel::Page;
     assert!(parse(&request).unwrap().provenance.is_none());
 }
@@ -308,4 +325,68 @@ fn locate_quote_grounds_a_citation_in_parsed_output() {
 
     // A fabricated quote is not located; the claim it backs is unverifiable.
     assert!(locate_quote(&document.markdown, "这句话不在文档里").is_none());
+}
+
+#[test]
+fn linear_block_provenance_tiles_identity_output_with_input_anchors() {
+    let bytes = "第一行\nsecond line\n最后".as_bytes();
+    let mut request = ParseRequest::new(bytes);
+    request.source_name = Some("note.txt");
+    request.provenance = ProvenanceLevel::Block;
+
+    let result = spoor_core::parse(&request).expect("parse text");
+    let spans = &result.provenance.expect("provenance").spans;
+
+    // Identity output: spans tile the whole output, each mapping to the same
+    // input byte range.
+    assert_eq!(spans.len(), 3);
+    let mut cursor = 0usize;
+    for span in spans.iter() {
+        assert_eq!(span.output.start, cursor);
+        let SourceAnchor::Input { start, end } = &span.source else {
+            panic!("expected input anchor: {:?}", span.source);
+        };
+        assert_eq!((*start, *end), (span.output.start, span.output.end));
+        cursor = span.output.end;
+    }
+    assert_eq!(cursor, bytes.len());
+}
+
+#[test]
+fn csv_block_provenance_anchors_cells_and_grounds_quotes() {
+    let bytes = include_bytes!("../../spoor-cli/tests/fixtures/csv/01_basic.csv");
+    let mut request = ParseRequest::new(bytes);
+    request.source_name = Some("data.csv");
+    request.provenance = ProvenanceLevel::Block;
+
+    let result = spoor_core::parse_document_result(&request).expect("parse csv as document");
+    let ParseContent::Document(document) = &result.content else {
+        panic!("expected document result");
+    };
+    let spans = &result.provenance.as_ref().expect("provenance").spans;
+    assert!(!spans.is_empty());
+
+    // Every anchor is a cell of the rendered table; slicing the markdown by
+    // the span gives the escaped cell text.
+    let cell = spans
+        .iter()
+        .find_map(|span| match &span.source {
+            SourceAnchor::Cell { row, column, .. } if *row == 1 => Some((span, column.clone())),
+            _ => None,
+        })
+        .expect("first data row cell");
+    let hit = &document.markdown[cell.0.output.start..cell.0.output.end];
+    assert!(!hit.trim().is_empty());
+
+    // Grounded locate on a cell value returns its Cell anchor.
+    let grounded =
+        spoor_core::locate_quote_grounded(&document.markdown, hit, spans).expect("locate");
+    assert!(matches!(grounded.anchor, Some(SourceAnchor::Cell { .. })));
+    assert_eq!(
+        match &grounded.anchor {
+            Some(SourceAnchor::Cell { column, .. }) => column.clone(),
+            _ => String::new(),
+        },
+        cell.1
+    );
 }

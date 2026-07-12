@@ -1,6 +1,6 @@
 # 来源定位（Provenance）设计
 
-状态：**M1（PDF 页级）与 M2（行级 + 坐标）已落地**。M3（线性格式与表格）为后续计划，本文同时记录已实现行为与后续方向。
+状态：**M1（PDF 页级）、M2（行级 + 坐标）、M3（线性格式与表格）均已落地**。本文记录已实现行为与剩余边界。
 
 ## 一句话
 
@@ -48,9 +48,11 @@ pub enum SourceAnchor {
     /// 页式格式（当前 PDF）：1-based 源页码；block 级下 born-digital 行
     /// 附近似包围盒（PDF 原生用户空间，y 向上，与 /MediaBox 同坐标系）。
     Page { number: usize, bbox: Option<Rect> },
-    // M3 计划新增：
-    //   Input { start, end }（纯文本 / Markdown 的原文字节区间）
-    //   Cell { sheet, row, column }（表格单元格）
+    /// 线性格式（纯文本 / Markdown）：输出片段来自输入的哪个字节区间。
+    Input { start: usize, end: usize },
+    /// CSV/XLSX 文档模式渲染表的单元格：row 为渲染表 1-based 数据行，
+    /// column 为表头单元格文本，sheet 为 XLSX 工作表名（CSV 无）。
+    Cell { sheet: Option<String>, row: usize, column: String },
 }
 ```
 
@@ -69,8 +71,8 @@ pub enum SourceAnchor {
 | 格式 | 锚点 | 状态 |
 | --- | --- | --- |
 | PDF | `Page { number, bbox }` | **页级与行级均已落地（M1+M2）**；bbox 来自字形几何（基线 ± 字号近似），仅 born-digital |
-| 纯文本 / Markdown | `Input { start, end }` | 计划（M3）：输入即线性 UTF-8，输出≈输入，区间直接可给 |
-| CSV / XLSX | `Cell { sheet, row, column }` | 计划（M3）：表格已能用 `sheet`/`rows`/`columns` 定位，锚点为补充 |
+| 纯文本 / Markdown | `Input { start, end }` | **已落地（M3）**：输出与输入逐字节相同时精确（page 级整篇一条、block 级按行铺满）；重编码输入（GBK 等）退化为整篇一条粗粒度映射，不猜逐行偏移 |
+| CSV / XLSX | `Cell { sheet, row, column }` | **已落地（M3）**：文档模式（Markdown 表）block 级逐数据单元格锚定；行号为渲染表数据行、列为表头文本；表头行与表格骨架不铺 span。注意 `parse` 自动分派对表格走 JSON 输出（无 markdown 可锚），Cell 锚点需走文档模式（Rust `parse_document_result` / CLI `--provenance block`） |
 | DOCX / PPTX / HTML / EPUB | — | 需要解析器保留段落/slide/元素序号，成本较高，更靠后 |
 
 ## 开关与分级
@@ -110,9 +112,10 @@ pub struct ParseRequest<'a> {
 - 断词行去掉行尾连字符后按前缀匹配；标题行匹配在 `### ` 前缀之后；被链接织入/表格重排改写的行与被去重的页眉页脚自然落空，字节归入无 bbox 的页级 gap。
 - 多栏重排页：markdown 与区间都按**重排后**的文本生成，`output` 区间与 `bbox` 一一对应。
 
-**M3 · 线性格式与表格**
-- 纯文本 / Markdown 给 `Input { start, end }`。
-- 表格加 `Cell { sheet, row, column }` 锚点。
+**M3 · 线性格式与表格 ✅ 已落地**
+- 纯文本 / Markdown：`Input { start, end }`。输出=输入时 block 级按行铺满（含换行、无缝隙）、page 级整篇一条；重编码输入退化为整篇一条。
+- CSV/XLSX 文档模式：block 级逐数据单元格 `Cell { sheet, row, column }`；`gfm_table_with_spans` 在渲染时逐格记录字节区间，零重复渲染逻辑。
+- `locate_quote_grounded` 对表格命中直接返回该单元格锚点（重叠最大者）。
 
 ## 确定性与边界
 

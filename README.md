@@ -105,7 +105,8 @@ PDF 页码筛选（`pages`）与内嵌媒体提取（`extract_media`）在 CLI�
 选项）返回每页"输出 markdown 字节区间 → 源页码"的来源定位映射，便于把 LLM 引用锚定
 回原文页；`--provenance block` 进一步细到行级，born-digital 行附 PDF 原生坐标
 包围盒（可直接交给 PDF.js 画高亮框），被改写或几何不可信的字节保持页级锚定；
-默认关闭。从 `v0.8.3` 起，发布的
+纯文本/Markdown 返回输入字节区间锚点，CSV/XLSX 文档模式返回单元格锚点
+（`{sheet, row, column}`）；默认关闭。从 `v0.8.3` 起，发布的
 WASM 包默认包含全部重点格式；
 需要更小体积时可自行构建 `core-formats`。
 

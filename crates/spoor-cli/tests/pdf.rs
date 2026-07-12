@@ -273,7 +273,9 @@ fn block_provenance_anchors_lines_with_boxes_and_refines_page_level() {
         assert!(span.output.start >= previous, "spans must not overlap");
         assert!(span.output.end > span.output.start);
         previous = span.output.end;
-        let SourceAnchor::Page { number, .. } = span.source;
+        let SourceAnchor::Page { number, .. } = span.source else {
+            panic!("PDF block spans must be page-anchored: {:?}", span.source);
+        };
         assert!((1..=2).contains(&number));
     }
 

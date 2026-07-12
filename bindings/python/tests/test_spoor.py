@@ -273,3 +273,13 @@ def test_locate_quote_grounded_returns_block_anchor() -> None:
     # Without provenance the anchor stays absent.
     plain = locate_quote(markdown, "Opening prose that follows the first heading.")
     assert plain is not None and plain.anchor is None
+
+
+def test_linear_and_cell_anchors_flow_through() -> None:
+    # Plain text at block level tiles identity output with input anchors.
+    result = parse_bytes(
+        "第一行\nsecond\n".encode(), source_name="note.txt", provenance="block"
+    )
+    spans = result.provenance.spans
+    assert [s["source"]["kind"] for s in spans] == ["input", "input"]
+    assert spans[0]["source"]["start"] == 0

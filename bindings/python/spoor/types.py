@@ -100,12 +100,32 @@ class Rect(TypedDict):
     y1: float
 
 
-class SourceAnchor(TypedDict):
-    """Where a span of output came from. Currently page-oriented (PDF)."""
+class PageAnchor(TypedDict):
+    """Page-oriented source (PDF); block level adds an approximate box."""
 
     kind: Literal["page"]
     number: int
     bbox: NotRequired[Rect]
+
+
+class InputAnchor(TypedDict):
+    """Linear source (plain text / Markdown): input byte range."""
+
+    kind: Literal["input"]
+    start: int
+    end: int
+
+
+class CellAnchor(TypedDict):
+    """Table cell in the document-mode rendering of CSV/XLSX."""
+
+    kind: Literal["cell"]
+    row: int
+    column: str
+    sheet: NotRequired[str]
+
+
+SourceAnchor = PageAnchor | InputAnchor | CellAnchor
 
 
 class ProvenanceSpan(TypedDict):

@@ -155,6 +155,12 @@ assert.ok(blockSpans.some((span) => span.source.bbox));
 assert.ok(blockSpans.some((span) => !span.source.bbox));
 assert.ok(blockSpans.every((span) => span.source.kind === 'page'));
 
+// Linear formats tile block-level provenance with input anchors.
+const linearProv = parse_bytes(
+  new TextEncoder().encode('line one\nline two\n'), 'note.txt', undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, 'block',
+);
+assert.ok(linearProv.provenance.spans.every((span) => span.source.kind === 'input'));
+
 // Repeated header/footer dedup reaches the WASM host too, with the keep
 // switch as the 14th positional arg.
 const furniturePdf = await readFile(new URL(

@@ -194,6 +194,22 @@ pub enum SourceAnchor {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         bbox: Option<Rect>,
     },
+    /// Linear formats (plain text / Markdown): the half-open byte range in
+    /// the *input* the output span came from. When the output is
+    /// byte-identical to the input the mapping is exact; a re-encoded input
+    /// (GBK, UTF-16, …) degrades to one coarse whole-document span rather
+    /// than guessing per-line offsets.
+    Input { start: usize, end: usize },
+    /// A table cell in the document-mode (Markdown) rendering of CSV/XLSX:
+    /// `row` is the 1-based data row of the rendered table (header = row 0's
+    /// labels, not addressable), `column` is the header cell's text, `sheet`
+    /// names the XLSX worksheet (absent for CSV).
+    Cell {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        sheet: Option<String>,
+        row: usize,
+        column: String,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

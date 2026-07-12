@@ -143,25 +143,44 @@ pub fn escape_table_cell(cell: &str) -> String {
 /// Returns an empty string when there are no rows or no columns. Each line
 /// ends with `\n`; callers add any surrounding blank lines.
 pub fn gfm_table(rows: &[Vec<String>]) -> String {
+    gfm_table_with_spans(rows).0
+}
+
+/// One rendered cell's byte range inside the string [`gfm_table_with_spans`]
+/// returned. `row` is the 0-based row in `rows` (0 = header row), `column`
+/// the 0-based column; the range covers the escaped cell text (empty cells
+/// yield an empty range at their position and are skipped).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RenderedCell {
+    pub row: usize,
+    pub column: usize,
+    pub start: usize,
+    pub end: usize,
+}
+
+/// [`gfm_table`], additionally reporting where each non-empty cell landed —
+/// the raw material for `Cell` provenance anchors.
+pub fn gfm_table_with_spans(rows: &[Vec<String>]) -> (String, Vec<RenderedCell>) {
     if rows.is_empty() {
-        return String::new();
+        return (String::new(), Vec::new());
     }
     let cols = rows.iter().map(Vec::len).max().unwrap_or(0);
     if cols == 0 {
-        return String::new();
+        return (String::new(), Vec::new());
     }
 
     let mut out = String::new();
-    push_table_row(&mut out, &rows[0], cols);
+    let mut cells = Vec::new();
+    push_table_row_with_spans(&mut out, &rows[0], cols, 0, &mut cells);
     out.push('|');
     for _ in 0..cols {
         out.push_str(" --- |");
     }
     out.push('\n');
-    for row in &rows[1..] {
-        push_table_row(&mut out, row, cols);
+    for (index, row) in rows[1..].iter().enumerate() {
+        push_table_row_with_spans(&mut out, row, cols, index + 1, &mut cells);
     }
-    out
+    (out, cells)
 }
 
 pub fn gfm_table_size(rows: &[Vec<String>]) -> usize {
@@ -204,13 +223,28 @@ fn escaped_table_cell_size(cell: &str) -> usize {
     })
 }
 
-fn push_table_row(out: &mut String, row: &[String], cols: usize) {
+fn push_table_row_with_spans(
+    out: &mut String,
+    row: &[String],
+    cols: usize,
+    row_index: usize,
+    cells: &mut Vec<RenderedCell>,
+) {
     out.push_str("| ");
     for col in 0..cols {
         if col > 0 {
             out.push_str(" | ");
         }
+        let start = out.len();
         out.push_str(&escape_table_cell(row.get(col).map_or("", String::as_str)));
+        if out.len() > start {
+            cells.push(RenderedCell {
+                row: row_index,
+                column: col,
+                start,
+                end: out.len(),
+            });
+        }
     }
     out.push_str(" |\n");
 }

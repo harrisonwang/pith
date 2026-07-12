@@ -230,3 +230,14 @@ test('locateQuote grounds a hit to its block anchor when provenance is passed', 
   const plain = locateQuote(md, 'Second page prose paragraph.');
   assert.equal(plain.anchor, undefined);
 });
+
+test('linear input anchors flow through block provenance', (t) => {
+  const result = parseBytes(Buffer.from('line one\nline two\n', 'utf8'), {
+    sourceName: 'note.txt',
+    provenance: 'block',
+  });
+  const spans = result.provenance.spans;
+  assert.ok(spans.length >= 2);
+  assert.ok(spans.every((span) => span.source.kind === 'input'));
+  assert.equal(spans[0].source.start, 0);
+});

@@ -38,6 +38,8 @@ pub(crate) mod pdf_media;
 mod plain;
 #[cfg(feature = "office")]
 mod pptx;
+#[cfg(feature = "tables")]
+mod table_provenance;
 #[cfg(feature = "html")]
 mod url;
 #[cfg(feature = "tables")]
@@ -89,15 +91,93 @@ pub fn extract(
     match format {
         Format::Url => extract_url(source, document_filter, max_parse_bytes),
         Format::Html => extract_html(source, document_filter, max_parse_bytes),
-        Format::Markdown => markdown::extract(source).map(ExtractedMarkdown::without_warnings),
+        Format::Markdown => {
+            markdown::extract(source).map(|markdown| linear_extracted(markdown, source, provenance))
+        }
         Format::Pdf => extract_pdf(source, document_filter, max_parse_bytes, provenance),
         Format::Docx => extract_docx(source, document_filter, max_parse_bytes),
-        Format::Xlsx => extract_xlsx(source, document_filter, max_parse_bytes),
+        Format::Xlsx => extract_xlsx(source, max_parse_bytes, provenance),
         Format::Pptx => extract_pptx(source, document_filter, max_parse_bytes),
-        Format::Csv => extract_csv(source, document_filter, max_parse_bytes),
+        Format::Csv => extract_csv(source, max_parse_bytes, provenance),
         Format::Ipynb => extract_ipynb(source, document_filter, max_parse_bytes),
         Format::Epub => extract_epub(source, document_filter, max_parse_bytes),
-        Format::PlainText => plain::extract(source).map(ExtractedMarkdown::without_warnings),
+        Format::PlainText => {
+            plain::extract(source).map(|markdown| linear_extracted(markdown, source, provenance))
+        }
+    }
+}
+
+/// Wrap a linear format's output (plain text / Markdown) with `Input` anchors.
+///
+/// When the output is byte-identical to the input the mapping is exact:
+/// `Page` level gives one whole-document span, `Block` level tiles the output
+/// line by line (newline included), each span pointing at the same input
+/// range. A re-encoded input (GBK, UTF-16, …) shifts offsets unpredictably,
+/// so it degrades to a single coarse whole-document span instead of guessing.
+fn linear_extracted(
+    markdown: String,
+    source: &Source<'_>,
+    provenance: ProvenanceLevel,
+) -> ExtractedMarkdown {
+    let spans = linear_input_spans(&markdown, source.bytes(), provenance);
+    ExtractedMarkdown {
+        markdown,
+        warnings: Vec::new(),
+        page_count: None,
+        provenance: spans,
+    }
+}
+
+fn linear_input_spans(
+    markdown: &str,
+    input: &[u8],
+    provenance: ProvenanceLevel,
+) -> Vec<ProvenanceSpan> {
+    use crate::result::{SourceAnchor, TextRange};
+    if matches!(provenance, ProvenanceLevel::Off) || markdown.is_empty() || input.is_empty() {
+        return Vec::new();
+    }
+    if markdown.as_bytes() != input {
+        return vec![ProvenanceSpan {
+            output: TextRange {
+                start: 0,
+                end: markdown.len(),
+            },
+            source: SourceAnchor::Input {
+                start: 0,
+                end: input.len(),
+            },
+        }];
+    }
+    match provenance {
+        ProvenanceLevel::Block => {
+            let mut spans = Vec::new();
+            let mut offset = 0usize;
+            for line in markdown.split_inclusive('\n') {
+                spans.push(ProvenanceSpan {
+                    output: TextRange {
+                        start: offset,
+                        end: offset + line.len(),
+                    },
+                    source: SourceAnchor::Input {
+                        start: offset,
+                        end: offset + line.len(),
+                    },
+                });
+                offset += line.len();
+            }
+            spans
+        }
+        _ => vec![ProvenanceSpan {
+            output: TextRange {
+                start: 0,
+                end: markdown.len(),
+            },
+            source: SourceAnchor::Input {
+                start: 0,
+                end: input.len(),
+            },
+        }],
     }
 }
 
@@ -144,10 +224,48 @@ macro_rules! format_extractor {
 
 format_extractor!(extract_url, "html", url);
 format_extractor!(extract_html, "html", html);
-format_extractor!(extract_xlsx, "tables", xlsx);
-format_extractor!(extract_csv, "tables", csv);
 format_extractor!(extract_ipynb, "notebook", ipynb);
 format_extractor!(extract_epub, "epub", epub);
+
+#[cfg(feature = "tables")]
+fn extract_csv(
+    source: &Source<'_>,
+    max_parse_bytes: usize,
+    provenance: ProvenanceLevel,
+) -> Result<ExtractedMarkdown> {
+    csv::extract(source, max_parse_bytes, provenance)
+}
+
+#[cfg(not(feature = "tables"))]
+fn extract_csv(
+    _source: &Source<'_>,
+    _max_parse_bytes: usize,
+    _provenance: ProvenanceLevel,
+) -> Result<ExtractedMarkdown> {
+    Err(anyhow!(
+        "format disabled at compile time; enable feature tables"
+    ))
+}
+
+#[cfg(feature = "tables")]
+fn extract_xlsx(
+    source: &Source<'_>,
+    max_parse_bytes: usize,
+    provenance: ProvenanceLevel,
+) -> Result<ExtractedMarkdown> {
+    xlsx::extract(source, max_parse_bytes, provenance)
+}
+
+#[cfg(not(feature = "tables"))]
+fn extract_xlsx(
+    _source: &Source<'_>,
+    _max_parse_bytes: usize,
+    _provenance: ProvenanceLevel,
+) -> Result<ExtractedMarkdown> {
+    Err(anyhow!(
+        "format disabled at compile time; enable feature tables"
+    ))
+}
 
 macro_rules! diagnostic_extractor {
     ($name:ident, $feature:literal, $module:ident) => {

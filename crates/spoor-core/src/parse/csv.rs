@@ -1,7 +1,9 @@
-use crate::engine::TableFilter;
+use crate::engine::{ProvenanceLevel, TableFilter};
 use crate::json_schema::{HeaderInfo, RowRange, TableEntry, a1_range, cells_to_values};
 use crate::limits;
-use crate::output::{decode_text, gfm_table, gfm_table_size};
+use crate::output::{decode_text, gfm_table_size, gfm_table_with_spans};
+use crate::parse::ExtractedMarkdown;
+use crate::parse::table_provenance::cell_spans;
 use crate::source::Source;
 use anyhow::{Result, anyhow};
 use std::collections::BTreeMap;
@@ -14,7 +16,11 @@ const DEFAULT_PREVIEW_ROWS: usize = 100;
 ///   2. Sniff delimiter from a sample (',' '\t' ';' '|').
 ///   3. Parse with `csv` crate, render as GFM table.
 ///   4. If file is huge, truncate to first N rows + a "(truncated)" line.
-pub fn extract(source: &Source<'_>, max_parse_bytes: usize) -> Result<String> {
+pub fn extract(
+    source: &Source<'_>,
+    max_parse_bytes: usize,
+    provenance: ProvenanceLevel,
+) -> Result<ExtractedMarkdown> {
     let text = decode_text(source.bytes());
     let delimiter = sniff_delimiter(&text);
 
@@ -47,11 +53,22 @@ pub fn extract(source: &Source<'_>, max_parse_bytes: usize) -> Result<String> {
         "CSV Markdown rendering",
     )?;
 
-    let mut out = gfm_table(&rows);
+    let (mut out, rendered_cells) = gfm_table_with_spans(&rows);
+    let spans = match provenance {
+        // Cell anchors are fine-grained by nature, so only block level pays
+        // for them; CSV has no sheet.
+        ProvenanceLevel::Block => cell_spans(&rows, &rendered_cells, 0, None),
+        ProvenanceLevel::Off | ProvenanceLevel::Page => Vec::new(),
+    };
     if truncated {
         out.push_str(&format!("\n_(truncated at {MARKDOWN_MAX_ROWS} rows)_\n"));
     }
-    Ok(out)
+    Ok(ExtractedMarkdown {
+        markdown: out,
+        warnings: Vec::new(),
+        page_count: None,
+        provenance: spans,
+    })
 }
 
 pub fn extract_table_entries(
