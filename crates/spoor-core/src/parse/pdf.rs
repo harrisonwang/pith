@@ -81,6 +81,24 @@ pub fn extract(
         })
         .collect();
 
+    // Weave URI link annotations into each page's text: anchored links become
+    // [text](url) in place, and targets whose anchor cannot be recovered are
+    // appended as autolinks, so the agent never loses a destination.
+    let pages: Vec<(usize, String)> = pages
+        .into_iter()
+        .map(|(number, text)| {
+            let links = span_pages
+                .get(&number)
+                .map(super::pdf_links::page_links)
+                .unwrap_or_default();
+            if links.is_empty() {
+                (number, text)
+            } else {
+                (number, super::pdf_links::apply_links(&text, &links))
+            }
+        })
+        .collect();
+
     // Best-effort: locate image XObjects so the renderer can mark their page
     // position and warn. A discovery failure just yields no image markers.
     let images = pdf_media::discover_images_from_doc(&doc, pages.len(), page_range);

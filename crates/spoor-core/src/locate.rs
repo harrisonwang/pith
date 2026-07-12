@@ -166,7 +166,9 @@ impl<'a> Locator<'a> {
     }
 
     /// All whitespace-insensitive occurrences of `needle`, as `md` byte ranges.
-    fn all_occurrences(&self, needle: &str) -> Vec<(usize, usize)> {
+    /// Also serves PDF link-anchor weaving, which must find every candidate
+    /// position for an anchor rather than only the first.
+    pub(crate) fn all_occurrences(&self, needle: &str) -> Vec<(usize, usize)> {
         let needle: String = needle.chars().filter(|c| !c.is_whitespace()).collect();
         if needle.is_empty() {
             return Vec::new();

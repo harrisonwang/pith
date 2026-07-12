@@ -396,6 +396,7 @@ mod tests {
             x1,
             y,
             font_size: 10.0,
+            link: None,
         }
     }
 
@@ -441,6 +442,7 @@ mod tests {
                 span("third line", 50.0, 190.0, 140.0),
             ],
             vector: Default::default(),
+            links: Vec::new(),
         };
         let (text, multi_column) = reading_order_text(&page).expect("text");
         assert!(!multi_column);
@@ -463,6 +465,7 @@ mod tests {
                 span("R3", 350.0, 550.0, 140.0),
             ],
             vector: Default::default(),
+            links: Vec::new(),
         };
         let (text, multi_column) = reading_order_text(&page).expect("text");
         assert!(multi_column, "a clear central gutter must be detected");
@@ -510,6 +513,7 @@ mod tests {
                 span("and a sixth line so detection can run", 50.0, 535.0, 200.0),
             ],
             vector: Default::default(),
+            links: Vec::new(),
         };
         let (_, multi_column) = reading_order_text(&page).expect("text");
         assert!(!multi_column, "straddling lines must not be split");
@@ -531,9 +535,11 @@ mod tests {
                     x1: f64::NAN,
                     y: 120.0,
                     font_size: 10.0,
+                    link: None,
                 },
             ],
             vector: Default::default(),
+            links: Vec::new(),
         };
         let (text, _) = reading_order_text(&page).expect("text");
         assert!(

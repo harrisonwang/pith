@@ -2312,6 +2312,10 @@ pub struct EngineSpan {
     pub x1: f64,
     pub y: f64,
     pub font_size: f64,
+    /// Index into [`EnginePage::links`] when this span sits inside that link
+    /// annotation's rectangle. Runs are segmented at link-rect boundaries, so a
+    /// link's anchor text is exactly the concatenation of its tagged spans.
+    pub link: Option<usize>,
 }
 
 /// Vector-graphics "ink" tallied per page: how many paths were painted and how
@@ -2327,6 +2331,13 @@ pub struct VectorInk {
     pub strokes: u32,
 }
 
+/// A URI link annotation on a page. The rectangle lives in `link_rects` on the
+/// collector while chars are assigned; only the target survives here.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EngineLink {
+    pub uri: String,
+}
+
 /// Page geometry: dimensions plus the positioned spans drawn on it.
 #[derive(Debug, Clone, Default)]
 pub struct EnginePage {
@@ -2334,6 +2345,8 @@ pub struct EnginePage {
     pub height: f64,
     pub spans: Vec<EngineSpan>,
     pub vector: VectorInk,
+    /// URI link annotations, indexed by [`EngineSpan::link`].
+    pub links: Vec<EngineLink>,
 }
 
 /// An `OutputDev` that records positioned text spans instead of emitting flat,
@@ -2346,6 +2359,13 @@ pub struct LayoutCollector {
     cur: Option<EngineSpan>,
     last_end: f64,
     last_y: f64,
+    /// URI link annotations for this page in PDF user space: (uri, [x0, y0,
+    /// x1, y1]). Converted to `link_rects` once `begin_page` knows the media
+    /// box.
+    user_links: Vec<(String, [f64; 4])>,
+    /// Engine-space (y-down) link rectangles, parallel to `page.links`:
+    /// [x0, y_top, x1, y_bottom].
+    link_rects: Vec<[f64; 4]>,
 }
 
 impl Default for LayoutCollector {
@@ -2356,13 +2376,37 @@ impl Default for LayoutCollector {
             cur: None,
             last_end: 0.,
             last_y: 0.,
+            user_links: Vec::new(),
+            link_rects: Vec::new(),
         }
     }
 }
 
+/// Slack around a link rectangle when testing whether a character's baseline
+/// point falls inside it; annotation rects are drawn with unpredictable
+/// padding, so an exact test drops boundary glyphs.
+const LINK_RECT_PAD: f64 = 1.0;
+
 impl LayoutCollector {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// Provide the page's URI link annotations (user-space rects) before the
+    /// page is processed.
+    pub fn set_links(&mut self, links: Vec<(String, [f64; 4])>) {
+        self.user_links = links;
+    }
+
+    /// Which link rect (if any) contains a character whose midpoint is `x` at
+    /// baseline `y`, both in engine space.
+    fn link_at(&self, x: f64, y: f64) -> Option<usize> {
+        self.link_rects.iter().position(|rect| {
+            x >= rect[0] - LINK_RECT_PAD
+                && x <= rect[2] + LINK_RECT_PAD
+                && y >= rect[1] - LINK_RECT_PAD
+                && y <= rect[3] + LINK_RECT_PAD
+        })
     }
 
     fn flush(&mut self) {
@@ -2384,6 +2428,15 @@ impl OutputDev for LayoutCollector {
         self.flip_ctm = Transform2D::row_major(1., 0., 0., -1., 0., media_box.ury - media_box.lly);
         self.page.width = media_box.urx - media_box.llx;
         self.page.height = media_box.ury - media_box.lly;
+        // Bring the user-space link rects into the same y-down space characters
+        // are recorded in, so `link_at` can compare them directly.
+        let flip_y = media_box.ury - media_box.lly;
+        for (uri, rect) in std::mem::take(&mut self.user_links) {
+            let (x0, x1) = (rect[0].min(rect[2]), rect[0].max(rect[2]));
+            let (y0, y1) = (rect[1].min(rect[3]), rect[1].max(rect[3]));
+            self.link_rects.push([x0, flip_y - y1, x1, flip_y - y0]);
+            self.page.links.push(EngineLink { uri });
+        }
         Ok(())
     }
     fn end_page(&mut self) -> Result<(), OutputError> {
@@ -2401,12 +2454,14 @@ impl OutputDev for LayoutCollector {
         let end_x = x + width * tfs;
 
         // Segment runs geometrically (begin_word hints are unreliable): break on
-        // a new line, a leftward jump, or a large horizontal gap.
+        // a new line, a leftward jump, a large horizontal gap, or a link-rect
+        // boundary (so a link's anchor text is exactly its own spans).
+        let link = self.link_at((x + end_x) / 2.0, y);
         if let Some(span) = &self.cur {
             let new_line = (y - self.last_y).abs() > tfs.max(span.font_size) * 0.5;
             let moved_left = x < self.last_end - tfs * 0.1;
             let big_gap = x > self.last_end + tfs * 0.5;
-            if new_line || moved_left || big_gap {
+            if new_line || moved_left || big_gap || span.link != link {
                 self.flush();
             }
         }
@@ -2428,6 +2483,7 @@ impl OutputDev for LayoutCollector {
                     x1: end_x,
                     y,
                     font_size: tfs,
+                    link,
                 });
             }
         }
@@ -2485,6 +2541,96 @@ pub fn extract_spans_from_mem_by_page_range(buffer: &[u8], page_range: Option<(u
     extract_spans_by_page_range(&load_pdf(buffer)?, page_range)
 }
 
+/// Most link annotations kept per page; a hostile `/Annots` array must not
+/// balloon span segmentation or the rendered output.
+const MAX_PAGE_LINKS: usize = 128;
+/// Longest accepted link target, in bytes.
+const MAX_LINK_URI_BYTES: usize = 2048;
+
+fn deref_dict<'a>(doc: &'a Document, object: &'a Object) -> Option<&'a Dictionary> {
+    match object {
+        Object::Reference(id) => doc.get_object(*id).ok()?.as_dict().ok(),
+        Object::Dictionary(dict) => Some(dict),
+        _ => None,
+    }
+}
+
+fn object_as_f64(object: &Object) -> Option<f64> {
+    match object {
+        Object::Integer(value) => Some(*value as f64),
+        Object::Real(value) => Some(*value as f64),
+        _ => None,
+    }
+}
+
+/// The page's URI link annotations as (target, user-space rect). Best-effort
+/// and bounded: malformed entries are skipped, never failing the page, and at
+/// most [`MAX_PAGE_LINKS`] survive. Only `/Subtype /Link` annotations with a
+/// `/S /URI` action qualify — internal GoTo links carry no external target.
+pub(crate) fn page_uri_links(doc: &Document, page_id: ObjectId) -> Vec<(String, [f64; 4])> {
+    let mut links = Vec::new();
+    let Ok(page) = doc.get_dictionary(page_id) else {
+        return links;
+    };
+    let annots = match page.get(b"Annots") {
+        Ok(Object::Reference(id)) => match doc.get_object(*id).and_then(Object::as_array) {
+            Ok(array) => array,
+            Err(_) => return links,
+        },
+        Ok(Object::Array(array)) => array,
+        _ => return links,
+    };
+
+    for entry in annots {
+        if links.len() >= MAX_PAGE_LINKS {
+            break;
+        }
+        let Some(annot) = deref_dict(doc, entry) else {
+            continue;
+        };
+        let is_link = annot
+            .get(b"Subtype")
+            .and_then(Object::as_name)
+            .is_ok_and(|name| name == b"Link");
+        if !is_link {
+            continue;
+        }
+        let Some(action) = annot.get(b"A").ok().and_then(|a| deref_dict(doc, a)) else {
+            continue;
+        };
+        let is_uri_action = action
+            .get(b"S")
+            .and_then(Object::as_name)
+            .is_ok_and(|name| name == b"URI");
+        if !is_uri_action {
+            continue;
+        }
+        let uri = match action.get(b"URI") {
+            Ok(Object::String(bytes, _)) => String::from_utf8_lossy(bytes).into_owned(),
+            Ok(Object::Reference(id)) => match doc.get_object(*id) {
+                Ok(Object::String(bytes, _)) => String::from_utf8_lossy(bytes).into_owned(),
+                _ => continue,
+            },
+            _ => continue,
+        };
+        if uri.is_empty() || uri.len() > MAX_LINK_URI_BYTES || uri.chars().any(char::is_control) {
+            continue;
+        }
+        let rect: Vec<f64> = match annot.get(b"Rect") {
+            Ok(Object::Array(values)) => values.iter().filter_map(object_as_f64).collect(),
+            _ => continue,
+        };
+        let [x0, y0, x1, y1] = rect.as_slice() else {
+            continue;
+        };
+        if !(x0.is_finite() && y0.is_finite() && x1.is_finite() && y1.is_finite()) {
+            continue;
+        }
+        links.push((uri, [*x0, *y0, *x1, *y1]));
+    }
+    links
+}
+
 /// Span extraction over an already-loaded document — the shared-`Document` entry
 /// point for the single-parse path.
 pub(crate) fn extract_spans_by_page_range(doc: &Document, page_range: Option<(usize, usize)>) -> Result<Vec<(usize, EnginePage)>, OutputError> {
@@ -2499,6 +2645,7 @@ pub(crate) fn extract_spans_by_page_range(doc: &Document, page_range: Option<(us
             }
         }
         let mut collector = LayoutCollector::new();
+        collector.set_links(page_uri_links(doc, object_id));
         // Per-page panic isolation: the vendored engine still has many panic
         // sites; one malformed page must not abort the whole document. A panicking
         // page is skipped (left out of the span map, so the caller falls back to

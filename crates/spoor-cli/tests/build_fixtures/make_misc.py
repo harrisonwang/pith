@@ -97,6 +97,141 @@ def build_mixed_text_and_image_pdf():
     c.save()
 
 
+def build_links_pdf():
+    """08: URI link annotations — anchored, unanchored, and unsafe-scheme."""
+    out = ROOT / "pdf"
+    out.mkdir(parents=True, exist_ok=True)
+    try:
+        from reportlab.pdfgen import canvas
+        from reportlab.lib.pagesizes import letter
+        from reportlab.pdfbase.pdfmetrics import stringWidth
+    except ImportError:
+        print("reportlab not installed - skipping links PDF")
+        return
+
+    c = canvas.Canvas(str(out / "08_links.pdf"), pagesize=letter)
+    c.setFont("Helvetica", 12)
+
+    # Anchored link: annotation rect sits exactly over "full guide".
+    prefix, anchor, suffix = "See the ", "full guide", " for details."
+    x, y = 72, 700
+    c.drawString(x, y, prefix + anchor + suffix)
+    ax0 = x + stringWidth(prefix, "Helvetica", 12)
+    ax1 = ax0 + stringWidth(anchor, "Helvetica", 12)
+    c.linkURL("https://example.com/guide", (ax0, y - 3, ax1, y + 11), relative=0)
+
+    # Unsafe scheme over real text: must be dropped, text left unwrapped.
+    js_text = "Do not execute this."
+    c.drawString(x, 660, js_text)
+    js_w = stringWidth(js_text, "Helvetica", 12)
+    c.linkURL("javascript:alert(1)", (x, 657, x + js_w, 671), relative=0)
+
+    # Unanchored link: rect over empty page area, target must still survive.
+    c.linkURL("https://example.com/api", (x, 600, x + 150, 615), relative=0)
+
+    c.showPage()
+    c.save()
+
+
+def build_outline_pdf():
+    """09: document outline (bookmarks) naming heading lines on two pages."""
+    out = ROOT / "pdf"
+    out.mkdir(parents=True, exist_ok=True)
+    try:
+        from reportlab.pdfgen import canvas
+        from reportlab.lib.pagesizes import letter
+    except ImportError:
+        print("reportlab not installed - skipping outline PDF")
+        return
+
+    c = canvas.Canvas(str(out / "09_outline.pdf"), pagesize=letter)
+    c.setFont("Helvetica", 12)
+
+    c.drawString(72, 720, "Introduction")
+    c.drawString(72, 700, "Opening prose that follows the first heading.")
+    c.drawString(72, 660, "Background")
+    c.drawString(72, 640, "More prose under the nested heading.")
+    c.bookmarkPage("intro")
+    c.addOutlineEntry("Introduction", "intro", level=0)
+    c.bookmarkPage("background")
+    c.addOutlineEntry("Background", "background", level=1)
+    c.showPage()
+
+    c.setFont("Helvetica", 12)
+    c.drawString(72, 720, "Methods")
+    c.drawString(72, 700, "Second page prose paragraph.")
+    c.bookmarkPage("methods")
+    c.addOutlineEntry("Methods", "methods", level=0)
+    # An outline entry whose title appears nowhere on the page: spoor must
+    # not fabricate a heading for it.
+    c.addOutlineEntry("Missing Section", "methods", level=1)
+    c.showPage()
+    c.save()
+
+
+def build_header_footer_pdf():
+    """10: repeated header/footer plus per-page page numbers across 4 pages."""
+    out = ROOT / "pdf"
+    out.mkdir(parents=True, exist_ok=True)
+    try:
+        from reportlab.pdfgen import canvas
+        from reportlab.lib.pagesizes import letter
+    except ImportError:
+        print("reportlab not installed - skipping header/footer PDF")
+        return
+
+    c = canvas.Canvas(str(out / "10_header_footer.pdf"), pagesize=letter)
+    bodies = [
+        "Revenue grew steadily across the first quarter.",
+        "Costs were kept flat by renegotiated contracts.",
+        "The outlook section describes second half risks.",
+        "Appendix tables list the full segment breakdown.",
+    ]
+    for number, body in enumerate(bodies, start=1):
+        c.setFont("Helvetica", 9)
+        c.drawString(72, 750, "ACME Corp Annual Report 2026")
+        c.setFont("Helvetica", 12)
+        c.drawString(72, 700, body)
+        c.setFont("Helvetica", 9)
+        c.drawString(280, 40, f"Page {number} of 4")
+        c.showPage()
+    c.save()
+
+
+def build_hyphenation_pdf():
+    """11: line-end hyphenated words that must be rejoined, plus guards."""
+    out = ROOT / "pdf"
+    out.mkdir(parents=True, exist_ok=True)
+    try:
+        from reportlab.pdfgen import canvas
+        from reportlab.lib.pagesizes import letter
+    except ImportError:
+        print("reportlab not installed - skipping hyphenation PDF")
+        return
+
+    c = canvas.Canvas(str(out / "11_hyphenation.pdf"), pagesize=letter)
+    c.setFont("Helvetica", 12)
+    lines = [
+        # Broken word: "dehyphen-" + "ation" must rejoin as "dehyphenation".
+        "The parser applies a conservative dehyphen-",
+        "ation pass to line ends before rendering.",
+        # Hyphenated compound broken at an inner hyphen: rejoining keeps it.
+        "The result reads like state-of-",
+        "the-art extraction output.",
+        # Guards that must NOT be joined:
+        "A trailing minus stays: total = subtotal -",
+        "discount applies on the following line.",
+        "A capitalized continuation stays split: UTF-",
+        "8 style acronyms keep their hyphen.",
+    ]
+    y = 720
+    for line in lines:
+        c.drawString(72, y, line)
+        y -= 20
+    c.showPage()
+    c.save()
+
+
 # ============================================================
 # EPUB — minimal but correct structure (container + OPF + spine)
 # ============================================================
@@ -193,6 +328,10 @@ def build_adversarial():
 
 if __name__ == "__main__":
     build_pdfs()
+    build_links_pdf()
+    build_outline_pdf()
+    build_header_footer_pdf()
+    build_hyphenation_pdf()
     build_epubs()
     build_plains()
     build_adversarial()

@@ -1,0 +1,92 @@
+%PDF-1.3
+%“Œ‹ž ReportLab Generated PDF document (opensource)
+1 0 obj
+<<
+/F1 2 0 R
+>>
+endobj
+2 0 obj
+<<
+/BaseFont /Helvetica /Encoding /WinAnsiEncoding /Name /F1 /Subtype /Type1 /Type /Font
+>>
+endobj
+3 0 obj
+<<
+/A <<
+/S /URI /Type /Action /URI (https://example.com/guide)
+>> /Border [ 0 0 0 ] /Rect [ 116.7 697 164.724 711 ] /Subtype /Link /Type /Annot
+>>
+endobj
+4 0 obj
+<<
+/A <<
+/S /URI /Type /Action /URI (javascript:alert\(1\))
+>> /Border [ 0 0 0 ] /Rect [ 72 657 178.056 671 ] /Subtype /Link /Type /Annot
+>>
+endobj
+5 0 obj
+<<
+/A <<
+/S /URI /Type /Action /URI (https://example.com/api)
+>> /Border [ 0 0 0 ] /Rect [ 72 600 222 615 ] /Subtype /Link /Type /Annot
+>>
+endobj
+6 0 obj
+<<
+/Annots [ 3 0 R 4 0 R 5 0 R ] /Contents 10 0 R /MediaBox [ 0 0 612 792 ] /Parent 9 0 R /Resources <<
+/Font 1 0 R /ProcSet [ /PDF /Text /ImageB /ImageC /ImageI ]
+>> /Rotate 0 
+  /Trans <<
+
+>> /Type /Page
+>>
+endobj
+7 0 obj
+<<
+/PageMode /UseNone /Pages 9 0 R /Type /Catalog
+>>
+endobj
+8 0 obj
+<<
+/Author (anonymous) /CreationDate (D:20260712141842+08'00') /Creator (anonymous) /Keywords () /ModDate (D:20260712141842+08'00') /Producer (ReportLab PDF Library - \(opensource\)) 
+  /Subject (unspecified) /Title (untitled) /Trapped /False
+>>
+endobj
+9 0 obj
+<<
+/Count 1 /Kids [ 6 0 R ] /Type /Pages
+>>
+endobj
+10 0 obj
+<<
+/Filter [ /ASCII85Decode /FlateDecode ] /Length 154
+>>
+stream
+Gas2@]*cD?'L_hG`@9=]mL:?(7BPph59S(-Y&%@i?1@HFO%'6i(l!T_"?/bUh2SX:Q<QX)F?o,s7X&[Uq")[!d8mX"Td-nW)<kZ?3<YAqpX>(&H:nJbDWMj$UPiKnC#8bKEet+7>F3f;jhDpq#;2`&&H~>endstream
+endobj
+xref
+0 11
+0000000000 65535 f 
+0000000061 00000 n 
+0000000092 00000 n 
+0000000199 00000 n 
+0000000362 00000 n 
+0000000518 00000 n 
+0000000672 00000 n 
+0000000896 00000 n 
+0000000964 00000 n 
+0000001225 00000 n 
+0000001284 00000 n 
+trailer
+<<
+/ID 
+[<9136a04e69720234b1b2c50df22c79b0><9136a04e69720234b1b2c50df22c79b0>]
+% ReportLab generated PDF document -- digest (opensource)
+
+/Info 8 0 R
+/Root 7 0 R
+/Size 11
+>>
+startxref
+1529
+%%EOF

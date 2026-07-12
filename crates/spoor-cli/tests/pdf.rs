@@ -105,6 +105,31 @@ fn page_filter_limits_pdf_output_to_requested_pages() {
 }
 
 #[test]
+fn uri_link_annotations_are_woven_into_markdown() {
+    // 08_links.pdf carries three URI link annotations: one whose rect sits
+    // exactly over "full guide", one javascript: action, and one over empty
+    // page area. The anchored link wraps in place, the executable scheme is
+    // dropped entirely, and the anchorless target survives as an autolink.
+    let out = extract_fixture("pdf/08_links.pdf", Format::Pdf);
+    assert!(
+        out.contains("See the [full guide](https://example.com/guide) for details."),
+        "anchored link must wrap its anchor in place:\n{out}"
+    );
+    assert!(
+        !out.contains("javascript:"),
+        "executable schemes must be dropped:\n{out}"
+    );
+    assert!(
+        out.contains("Do not execute this."),
+        "text under a dropped link keeps its plain form:\n{out}"
+    );
+    assert!(
+        out.contains("<https://example.com/api>"),
+        "anchorless target must survive as an autolink:\n{out}"
+    );
+}
+
+#[test]
 fn two_column_pdf_is_read_left_column_then_right_with_warning() {
     // 07_two_column.pdf draws the two columns interleaved row-by-row in the
     // content stream, so flat extraction interleaves them. Geometric
