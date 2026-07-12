@@ -3285,7 +3285,7 @@ dependencies = [
 
 [[package]]
 name = "spoor-core"
-version = "0.8.20"
+version = "0.9.0"
 dependencies = [
  "adobe-cmap-parser",
  "anyhow",
