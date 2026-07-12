@@ -433,10 +433,10 @@ fn page_resources(doc: &Document, page_id: ObjectId) -> Option<&Dictionary> {
                 return Some(resources);
             }
         }
-        match dict.get(b"Parent").ok().and_then(|p| p.as_reference().ok()) {
-            Some(parent) => current = parent,
-            None => return None,
-        }
+        current = dict
+            .get(b"Parent")
+            .ok()
+            .and_then(|p| p.as_reference().ok())?;
     }
     None
 }

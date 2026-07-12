@@ -284,7 +284,7 @@ fn empty_entry(source_label: &str, delimiter_str: &str) -> TableEntry {
 
 fn sniff_delimiter(text: &str) -> u8 {
     let sample: String = text.lines().take(20).collect::<Vec<_>>().join("\n");
-    let candidates = [b',', b'\t', b';', b'|'];
+    let candidates = *b",\t;|";
     let mut best = (b',', 0usize);
     for &d in &candidates {
         let count = sample.bytes().filter(|&b| b == d).count();

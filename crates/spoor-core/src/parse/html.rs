@@ -310,10 +310,8 @@ fn has_scheme(link: &str) -> bool {
 fn split_http_url(url: &str) -> Option<(&str, &str, &str)> {
     let (scheme, rest) = if let Some(rest) = url.strip_prefix("https://") {
         ("https", rest)
-    } else if let Some(rest) = url.strip_prefix("http://") {
-        ("http", rest)
     } else {
-        return None;
+        ("http", url.strip_prefix("http://")?)
     };
 
     let auth_end = rest.find(['/', '?', '#']).unwrap_or(rest.len());
