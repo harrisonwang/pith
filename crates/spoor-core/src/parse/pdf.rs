@@ -117,6 +117,9 @@ pub fn extract(
     let pages: Vec<(usize, String)> = pages
         .into_iter()
         .map(|(number, text)| {
+            // Rejoin words broken across line ends before heading and link
+            // matching, so both passes see whole tokens.
+            let text = super::pdf_dehyphen::dehyphenate(&text);
             let text = match headings_by_page.get(&number) {
                 Some(headings) => super::pdf_outline::apply_headings(&text, headings),
                 None => text,

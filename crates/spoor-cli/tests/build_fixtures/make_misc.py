@@ -226,10 +226,13 @@ def build_hyphenation_pdf():
         "A capitalized continuation stays split: UTF-",
         "8 style acronyms keep their hyphen.",
     ]
+    # Tight leading (14pt at 12pt font) mirrors real justified body text;
+    # wider gaps extract as paragraph breaks, which dehyphenation must not
+    # join across.
     y = 720
     for line in lines:
         c.drawString(72, y, line)
-        y -= 20
+        y -= 14
     c.showPage()
     c.save()
 

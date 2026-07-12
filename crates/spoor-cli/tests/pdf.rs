@@ -224,6 +224,30 @@ fn keep_repeated_regions_retains_verbatim_page_text() {
 }
 
 #[test]
+fn line_end_hyphenation_rejoins_conservatively() {
+    // 11_hyphenation.pdf breaks "dehyphenation" and "state-of-the-art" across
+    // tightly-leaded lines, plus two guards that must stay split: a
+    // free-standing minus and an uppercase acronym continuation.
+    let out = extract_fixture("pdf/11_hyphenation.pdf", Format::Pdf);
+    assert!(
+        out.contains("conservative dehyphenation pass"),
+        "broken word must rejoin without its hyphen:\n{out}"
+    );
+    assert!(
+        out.contains("state-of-the-art extraction"),
+        "compound broken at an inner hyphen must keep it:\n{out}"
+    );
+    assert!(
+        out.contains("subtotal -\ndiscount"),
+        "a free-standing minus is not a word break:\n{out}"
+    );
+    assert!(
+        out.contains("UTF-\n8"),
+        "digit/uppercase continuations stay split:\n{out}"
+    );
+}
+
+#[test]
 fn two_column_pdf_is_read_left_column_then_right_with_warning() {
     // 07_two_column.pdf draws the two columns interleaved row-by-row in the
     // content stream, so flat extraction interleaves them. Geometric
