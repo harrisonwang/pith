@@ -44,6 +44,7 @@ class Bbox(BaseModel):
 
 
 class EvidenceAnchor(BaseModel):
+    doc: int | None = None
     page: int
     bbox: Bbox | None = None
 

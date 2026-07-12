@@ -2,7 +2,7 @@
 
 **答案溯源** —— 对一份真实文档做问答,并**逐条证明 AI 的回答有原文出处、不是杜撰的**。
 
-每条结论就地标可信度(✓已核验 / ~需复核 / ✗无法核验)并附**原文证据**(引文片段,或表格的「表·行·列=值」+ 页码);hover 看证据,点「定位原文」滑出原文下钻。演示数据是真实研报(东吴证券《比亚迪 2024 年报点评》)经 spoor 解析的内容。
+每条结论就地标可信度(✓已核验 / ~需复核 / ✗无法核验)并附**原文证据**(引文片段,或表格的「表·行·列=值」+ 页码);hover 看证据,点「定位原文」滑出原文下钻。上传的 PDF 经 spoor `provenance:"block"` 解析后,证据还带**源页坐标锚点**——下钻抽屉里用 PDF.js 渲出**原始 PDF 该页并框出证据位置**(锚点缺失时优雅回退为解析文本高亮)。演示数据是真实研报(东吴证券《比亚迪 2024 年报点评》)经 spoor 解析的内容。
 
 前后端一个工程,中间夹一份**共享协议** `AnswerTrace`(matcher 后端 → viewer 前端的唯一契约)。
 
@@ -23,7 +23,7 @@ answer-trace/
 
 > 三种后端形态可任选：`api`(Python 本地) · `edge`(独立 Worker) · `pages`(Pages Functions 合一，含分级核验)。前端 `web` 与它们靠 `/api/*` 契约解耦。
 
-> **路线图(暂未建,需要时再加):** `apps/worker`(异步解析/核验任务)、`packages/ui`(抽成可嵌入 Svelte 组件库)、`infra/`(docker-compose + Dockerfile,部署时)、`openapi.yaml + generated/`(协议漂移了再上 codegen)、**PDF.js 画框**(数据已就绪:上传语料经 spoor `provenance:"block"` 解析,quote 证据带 `anchor{page,bbox}`——bbox 为 PDF 原生用户空间坐标,直接 `viewport.convertToViewportRectangle`;原始 PDF 在 KV `raw:${corpusId}:${i}`,补一个 raw 端点 + pdfjs-dist 单页渲染即可)、**matcher 表格 cell 证据**(live 答案现在都走 quote 证据)、**live 答案的原文下钻**(现在仅内置三轮可「定位原文」)。
+> **路线图(暂未建,需要时再加):** `apps/worker`(异步解析/核验任务)、`packages/ui`(抽成可嵌入 Svelte 组件库)、`infra/`(docker-compose + Dockerfile,部署时)、`openapi.yaml + generated/`(协议漂移了再上 codegen)、**matcher 表格 cell 证据**(live 答案现在都走 quote 证据)、**live 答案的原文下钻**(现在仅内置三轮可「定位原文」)。
 
 ## 跑起来
 

@@ -76,6 +76,7 @@
       "required": ["page"],
       "additionalProperties": false,
       "properties": {
+        "doc": { "type": "integer" },
         "page": { "type": "integer" },
         "bbox": {
           "type": "object",

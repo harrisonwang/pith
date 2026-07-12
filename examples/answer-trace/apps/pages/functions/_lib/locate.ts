@@ -29,6 +29,8 @@ export interface Located {
 // 「单文档 markdown」的 UTF-8 字节区间;两步换算后取重叠最大的 span 的 source。
 
 export interface EvidenceAnchor {
+  /** 命中所在文档在语料中的下标(0-based)。 */
+  doc?: number;
   page: number;
   bbox?: { x0: number; y0: number; x1: number; y1: number };
 }
@@ -82,9 +84,13 @@ export function anchorFor(
 
   let best: { overlap: number; anchor: EvidenceAnchor } | null = null;
   for (const p of doc.provenance) {
+    if (p.source.kind !== "page") continue;
     const overlap = Math.min(p.output.end, utf8End) - Math.max(p.output.start, utf8Start);
     if (overlap > 0 && (!best || overlap > best.overlap)) {
-      best = { overlap, anchor: { page: p.source.number, bbox: p.source.bbox } };
+      best = {
+        overlap,
+        anchor: { doc: index, page: p.source.number, bbox: p.source.bbox },
+      };
     }
   }
   if (!best) return null;

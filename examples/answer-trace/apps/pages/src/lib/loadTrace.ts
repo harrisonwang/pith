@@ -16,6 +16,11 @@ const API = "";
 // 本地内存态后端(apps/api)不返回 corpusId，保持 null，后端回退到其当前语料。
 let currentCorpusId: string | null = null;
 
+/** 当前上传语料的 id;证据下钻取原始 PDF(/api/raw)时带上。 */
+export function currentCorpus(): string | null {
+    return currentCorpusId;
+}
+
 // 用内置 demo.json + byd.md 拼出离线 fixture(符合新的 DemoPayload 形状)。
 // 离线时 spoor:// 图片无法提取,换成纯文本说明。
 const demoSrc = (

@@ -49,6 +49,7 @@ describe("anchorFor：跨文档段表 + UTF-16→UTF-8 + 最大重叠", () => {
 
     expect(anchor).not.toBeNull();
     expect(anchor!.page).toBe(1);
+    expect(anchor!.doc).toBe(1);
     expect(anchor!.bbox).toEqual({ x0: 72, y0: 700, x1: 400, y1: 715 });
   });
 

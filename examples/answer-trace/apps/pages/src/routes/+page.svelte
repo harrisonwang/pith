@@ -1,9 +1,9 @@
 <script lang="ts">
   import { onMount } from 'svelte'
-  import type { AnswerTrace, Evidence, Verdict } from '@answer-trace/protocol'
+  import type { AnswerTrace, Evidence, EvidenceAnchor, Verdict } from '@answer-trace/protocol'
   import ChatRound from '$lib/components/ChatRound.svelte'
   import SourceDrawer from '$lib/components/SourceDrawer.svelte'
-  import { askQuestion, uploadFiles } from '$lib/loadTrace'
+  import { askQuestion, currentCorpus, uploadFiles } from '$lib/loadTrace'
 
   interface Round {
     trace: AnswerTrace
@@ -38,7 +38,18 @@
     status: Verdict
     title: string
     page: number | null
-  }>({ open: false, markdown: '', locate: null, status: 'supported', title: '', page: null })
+    anchor: EvidenceAnchor | null
+    corpusId: string | null
+  }>({
+    open: false,
+    markdown: '',
+    locate: null,
+    status: 'supported',
+    title: '',
+    page: null,
+    anchor: null,
+    corpusId: null,
+  })
 
   onMount(() => {
     // 空初始态,不加载演示数据。用户上传文档后开始提问。
@@ -54,6 +65,9 @@
       status: ev.verdict,
       title: round.title,
       page: ev.page ?? null,
+      // quote 证据带 anchor(块级 provenance 命中)时,抽屉可回原 PDF 画框。
+      anchor: ev.kind === 'quote' ? (ev.anchor ?? null) : null,
+      corpusId: currentCorpus(),
     }
   }
 
@@ -210,6 +224,8 @@
     status={drawer.status}
     title={drawer.title}
     page={drawer.page}
+    anchor={drawer.anchor}
+    corpusId={drawer.corpusId}
     onClose={() => (drawer = { ...drawer, open: false })}
   />
 </div>
