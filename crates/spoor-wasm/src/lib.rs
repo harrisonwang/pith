@@ -99,6 +99,49 @@ pub fn extract_media(
     spoor_core::extract_media(&request, &resource).map_err(error_value)
 }
 
+/// Ground an LLM-cited quote in Markdown spoor produced. Tries four
+/// deterministic tiers (exact, whitespace-insensitive, table-cell anchor,
+/// numeric/unit equivalence) and returns `null` when none matches — treat the
+/// claim the quote backs as unverifiable. `span` indexes `markdown` as a JS
+/// string (UTF-16 code units), so `markdown.slice(span.start, span.end)` is
+/// the raw hit; `page` comes from spoor's own `## Page N` markers when present.
+#[wasm_bindgen]
+pub fn locate_quote(markdown: &str, quote: &str) -> Result<JsValue, JsValue> {
+    #[derive(serde::Serialize)]
+    struct Span {
+        start: usize,
+        end: usize,
+    }
+    #[derive(serde::Serialize)]
+    struct Located<'a> {
+        before: &'a str,
+        hit: &'a str,
+        after: &'a str,
+        span: Span,
+        page: Option<usize>,
+        method: &'static str,
+    }
+
+    let Some(found) = spoor_core::locate_quote(markdown, quote) else {
+        return Ok(JsValue::NULL);
+    };
+    // Core spans are UTF-8 byte offsets; convert to UTF-16 code units.
+    let start = markdown[..found.span.start].encode_utf16().count();
+    let end = start
+        + markdown[found.span.start..found.span.end]
+            .encode_utf16()
+            .count();
+    let located = Located {
+        before: &found.before,
+        hit: &found.hit,
+        after: &found.after,
+        span: Span { start, end },
+        page: found.page,
+        method: found.method.as_str(),
+    };
+    serde_wasm_bindgen::to_value(&located).map_err(|error| JsValue::from_str(&error.to_string()))
+}
+
 fn request<'a>(
     bytes: &'a [u8],
     source_name: Option<&'a str>,

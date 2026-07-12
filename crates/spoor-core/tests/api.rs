@@ -268,3 +268,36 @@ fn page_provenance_is_empty_for_non_paged_formats() {
     request.provenance = ProvenanceLevel::Page;
     assert!(parse(&request).unwrap().provenance.is_none());
 }
+
+#[test]
+#[cfg(feature = "pdf")]
+fn locate_quote_grounds_a_citation_in_parsed_output() {
+    use spoor_core::{LocateMethod, locate_quote};
+    // End to end: parse a real PDF, then ground quotes in the produced
+    // Markdown the way an answer-verification layer would.
+    let bytes = include_bytes!("../../spoor-cli/tests/fixtures/pdf/02_multipage.pdf");
+    let mut request = ParseRequest::new(bytes);
+    request.source_name = Some("doc.pdf");
+    let result = parse(&request).unwrap();
+    let ParseContent::Document(document) = result.content else {
+        panic!("expected document output");
+    };
+
+    // A quote lifted verbatim from page 2 lands on page 2.
+    let verbatim = document
+        .markdown
+        .lines()
+        .skip_while(|line| !line.starts_with("## Page 2"))
+        .find(|line| !line.starts_with('#') && !line.trim().is_empty())
+        .expect("page 2 has body text");
+    let found = locate_quote(&document.markdown, verbatim).expect("verbatim quote located");
+    assert_eq!(found.method, LocateMethod::Exact);
+    assert_eq!(found.page, Some(2));
+    assert_eq!(
+        &document.markdown[found.span.start..found.span.end],
+        verbatim
+    );
+
+    // A fabricated quote is not located; the claim it backs is unverifiable.
+    assert!(locate_quote(&document.markdown, "这句话不在文档里").is_none());
+}

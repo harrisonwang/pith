@@ -32,3 +32,7 @@ def detect_format(
     source_name: str | None,
     content_type: str | None,
 ) -> str: ...
+def locate_quote(
+    markdown: str,
+    quote: str,
+) -> dict[str, Any] | None: ...

@@ -588,4 +588,5 @@ if (!nativeBinding) {
 module.exports = nativeBinding
 module.exports.detectFormat = nativeBinding.detectFormat
 module.exports.extractMedia = nativeBinding.extractMedia
+module.exports.locateQuote = nativeBinding.locateQuote
 module.exports.parseBytes = nativeBinding.parseBytes

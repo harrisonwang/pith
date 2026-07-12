@@ -6,6 +6,7 @@ from spoor import (
     SpoorError,
     detect_format,
     extract_media,
+    locate_quote,
     parse_bytes,
     parse_path,
 )
@@ -177,3 +178,41 @@ def test_cfb_office_container_is_intercepted() -> None:
         assert error.recoverable is False
     else:
         raise AssertionError("expected SpoorError")
+
+
+LOCATE_MD = (
+    "## Page 1\n\n"
+    "| 指标 | 2023A | 2024A |\n"
+    "| 营业总收入（百万元） | 602315 | 777102 |\n"
+    "| 归母净利润（百万元） | 30041 | 53128 |\n\n"
+    "## Page 2\n\n"
+    "比亚迪 2024 年实现营业总收入 7,771.02 亿元，同比增长 29.0%。\n"
+)
+
+
+def test_locate_quote_exact_span_slices_the_hit() -> None:
+    found = locate_quote(LOCATE_MD, "同比增长 29.0%")
+    assert found is not None
+    assert found.method == "exact"
+    assert LOCATE_MD[found.span["start"] : found.span["end"]] == "同比增长 29.0%"
+    assert found.page == 2
+
+
+def test_locate_quote_table_reassembly_returns_the_row() -> None:
+    found = locate_quote(LOCATE_MD, "2024A 归母净利润（百万元） 53128")
+    assert found is not None
+    assert found.method == "table_anchor"
+    assert "53128" in found.hit
+    assert found.page == 1
+
+
+def test_locate_quote_unit_conversion_matches_numerically() -> None:
+    found = locate_quote(LOCATE_MD, "营业总收入 7771.5 亿")
+    assert found is not None
+    assert found.method == "numeric_equivalence"
+    assert "777102" in found.hit
+
+
+def test_locate_quote_rejects_fabrications() -> None:
+    assert locate_quote(LOCATE_MD, "海外收入 9999 亿") is None
+    assert locate_quote(LOCATE_MD, "") is None

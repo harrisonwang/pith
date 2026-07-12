@@ -52,7 +52,8 @@ export type WarningCode =
   | 'pdf_page_suspicious_text_layer'
   | 'pdf_multi_column_reading_order'
   | 'merged_table_structure_not_preserved'
-  | 'embedded_visuals_omitted';
+  | 'embedded_visuals_omitted'
+  | 'vector_graphics_omitted';
 
 export interface SpoorWarning {
   code: WarningCode;
@@ -92,6 +93,31 @@ export interface ParseResult {
   provenance?: Provenance;
 }
 
+export type LocateMethod =
+  | 'exact'
+  | 'whitespace_insensitive'
+  | 'table_anchor'
+  | 'numeric_equivalence';
+
+/** A grounded quote: where it sits in the markdown and what surrounds it. */
+export interface LocatedQuote {
+  /**
+   * Half-open `[start, end)` range in UTF-16 code units (JS string indices),
+   * so `markdown.slice(span.start, span.end)` is the raw hit — unlike
+   * provenance ranges, which are UTF-8 byte offsets.
+   */
+  span: { start: number; end: number };
+  /** Up to 30 chars of whitespace-collapsed context before the hit. */
+  before: string;
+  /** The matched text, whitespace-collapsed. */
+  hit: string;
+  /** Up to 30 chars of whitespace-collapsed context after the hit. */
+  after: string;
+  /** 1-based source page from spoor's `## Page N` markers; null without them. */
+  page: number | null;
+  method: LocateMethod;
+}
+
 export interface SpoorError extends Error {
   is_error: true;
   code: string;
@@ -104,3 +130,4 @@ export interface SpoorError extends Error {
 export function detectFormat(data: Buffer, sourceName?: string | null): string;
 export function parseBytes(data: Buffer, options?: ParseOptions | null): ParseResult;
 export function extractMedia(data: Buffer, resource: string, options?: ParseOptions | null): Buffer;
+export function locateQuote(markdown: string, quote: string): LocatedQuote | null;

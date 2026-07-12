@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import init, {
   detect_format,
   extract_media,
+  locate_quote,
   parse_bytes,
 } from '../../crates/spoor-wasm/pkg-web/spoor_wasm.js';
 
@@ -143,3 +144,31 @@ assert.ok(new TextDecoder().decode(provMd.subarray(start, end)).startsWith('## P
 
 // Off by default: no provenance field on the result.
 assert.equal(parse_bytes(multipagePdf, 'doc.pdf').provenance, undefined);
+
+// Quote grounding: four deterministic tiers, spans in UTF-16 code units so
+// String.prototype.slice recovers the hit directly.
+const locateMd = [
+  '## Page 1',
+  '',
+  '| 营业总收入（百万元） | 602315 | 777102 |',
+  '| 归母净利润（百万元） | 30041 | 53128 |',
+  '',
+  '实现营业总收入 7,771.02 亿元，同比增长 29.0%。',
+  '',
+].join('\n');
+
+const exactHit = locate_quote(locateMd, '同比增长 29.0%');
+assert.equal(exactHit.method, 'exact');
+assert.equal(locateMd.slice(exactHit.span.start, exactHit.span.end), '同比增长 29.0%');
+assert.equal(exactHit.page, 1);
+
+const rowHit = locate_quote(locateMd, '2024A 归母净利润（百万元） 53128');
+assert.equal(rowHit.method, 'table_anchor');
+assert.ok(rowHit.hit.includes('53128'));
+
+const convertedHit = locate_quote(locateMd, '营业总收入 7771.5 亿');
+assert.equal(convertedHit.method, 'numeric_equivalence');
+assert.ok(convertedHit.hit.includes('777102'));
+
+assert.equal(locate_quote(locateMd, '海外收入 9999 亿'), null);
+assert.equal(locate_quote(locateMd, ''), null);

@@ -9,6 +9,7 @@ WarningCode = Literal[
     "pdf_multi_column_reading_order",
     "merged_table_structure_not_preserved",
     "embedded_visuals_omitted",
+    "vector_graphics_omitted",
 ]
 
 
@@ -58,6 +59,35 @@ class TextRange(TypedDict):
 
     start: int
     end: int
+
+
+LocateMethod = Literal[
+    "exact",
+    "whitespace_insensitive",
+    "table_anchor",
+    "numeric_equivalence",
+]
+
+
+class QuoteSpan(TypedDict):
+    """Half-open ``[start, end)`` ``str``-index range into the markdown that
+    was searched, so ``markdown[start:end]`` slices the raw hit (unlike
+    provenance byte ranges)."""
+
+    start: int
+    end: int
+
+
+@dataclass(frozen=True, slots=True)
+class LocatedQuote:
+    """A grounded quote: where it sits in the markdown and what surrounds it."""
+
+    span: QuoteSpan
+    before: str
+    hit: str
+    after: str
+    page: int | None
+    method: LocateMethod
 
 
 class SourceAnchor(TypedDict):

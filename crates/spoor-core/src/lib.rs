@@ -8,6 +8,7 @@ mod engine;
 mod error;
 mod json_schema;
 mod limits;
+mod locate;
 mod output;
 mod parse;
 mod render;
@@ -26,6 +27,7 @@ pub use json_schema::{
     a1_range, cells_to_values,
 };
 pub use limits::{DEFAULT_MAX_PARSE_BYTES, MIN_MAX_PARSE_BYTES};
+pub use locate::{LocateMethod, LocatedQuote, Locator, locate_quote};
 pub use render::{
     DEFAULT_MAX_OUTPUT_BYTES, LimitedOutput, MIN_MAX_OUTPUT_BYTES, OutputMode, default_mode_for,
     limit_markdown_output, render_documents, render_json, render_json_limited,

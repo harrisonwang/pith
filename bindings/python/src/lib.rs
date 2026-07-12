@@ -75,6 +75,30 @@ fn extract_media<'py>(
     Ok(PyBytes::new(py, &bytes))
 }
 
+/// Ground an LLM-cited quote in Markdown spoor produced. Returns a dict with
+/// the hit's span, collapsed context, source page, and match method, or `None`
+/// when no deterministic tier matches — the claim the quote backs is then
+/// unverifiable. The span indexes `markdown` as a Python `str`.
+#[pyfunction(signature = (markdown, quote))]
+fn locate_quote(py: Python<'_>, markdown: &str, quote: &str) -> PyResult<Py<PyAny>> {
+    let Some(found) = py.detach(|| spoor_core::locate_quote(markdown, quote)) else {
+        return Ok(py.None());
+    };
+    // Core spans are UTF-8 byte offsets; convert to Python str indices so
+    // `markdown[start:end]` slices the hit directly.
+    let start = markdown[..found.span.start].chars().count();
+    let end = start + markdown[found.span.start..found.span.end].chars().count();
+    let value = serde_json::json!({
+        "before": found.before,
+        "hit": found.hit,
+        "after": found.after,
+        "span": {"start": start, "end": end},
+        "page": found.page,
+        "method": found.method.as_str(),
+    });
+    value_to_python(py, &value)
+}
+
 #[pyfunction(signature = (data, source_name=None, content_type=None))]
 fn detect_format(
     py: Python<'_>,
@@ -155,5 +179,6 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(parse_bytes, module)?)?;
     module.add_function(wrap_pyfunction!(extract_media, module)?)?;
     module.add_function(wrap_pyfunction!(detect_format, module)?)?;
+    module.add_function(wrap_pyfunction!(locate_quote, module)?)?;
     Ok(())
 }

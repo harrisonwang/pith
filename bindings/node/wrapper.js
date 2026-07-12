@@ -21,3 +21,5 @@ module.exports.parseBytes = (...args) =>
   callWithStructuredErrors(native.parseBytes, args);
 module.exports.extractMedia = (...args) =>
   callWithStructuredErrors(native.extractMedia, args);
+module.exports.locateQuote = (...args) =>
+  callWithStructuredErrors(native.locateQuote, args);

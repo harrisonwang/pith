@@ -2,21 +2,55 @@
 /* eslint-disable */
 export declare function detectFormat(data: Buffer, sourceName?: string | undefined | null): string
 
-export declare function parseBytes(data: Buffer, options?: ParseOptions | undefined | null): any
-
+/**
+ * Extract one safe embedded media resource referenced by a URI emitted in the
+ * parsed output (e.g. `spoor://docx/part/word/media/image1.png`,
+ * `spoor://pptx/part/ppt/media/imageN.png`, or `spoor://pdf/obj/{id}/{gen}`).
+ * Returns the raw resource bytes. spoor does not decode or interpret the bytes.
+ */
 export declare function extractMedia(data: Buffer, resource: string, options?: ParseOptions | undefined | null): Buffer
+
+/**
+ * Ground an LLM-cited quote in Markdown spoor produced. Tries four
+ * deterministic tiers (exact, whitespace-insensitive, table-cell anchor,
+ * numeric/unit equivalence) and returns `null` when none matches — treat the
+ * claim the quote backs as unverifiable. `span` indexes `markdown` as a JS
+ * string (UTF-16 code units), so `markdown.slice(span.start, span.end)` is
+ * the raw hit; `page` comes from spoor's own `## Page N` markers when present.
+ */
+export declare function locateQuote(markdown: string, quote: string): any
+
+export declare function parseBytes(data: Buffer, options?: ParseOptions | undefined | null): any
 
 export interface ParseOptions {
   sourceName?: string
   contentType?: string
   format?: string
   maxParseBytes?: number
+  /** XLSX only: restrict output to one sheet by name. */
   sheet?: string
+  /**
+   * Inclusive 1-based `[first, last]` row range (Excel rows for XLSX, line
+   * numbers for CSV). Mutually exclusive with `limit`/`offset`.
+   */
   rows?: Array<number>
+  /** Keep only these columns, by header name. */
   columns?: Array<string>
+  /** Max data rows per table (default 100). */
   limit?: number
+  /** Skip this many data rows before applying `limit`. */
   offset?: number
+  /** PDF only: inclusive 1-based `[first, last]` page range to parse. */
   pages?: Array<number>
+  /**
+   * Cooperative cap on in-parser work units (e.g. PDF operations) to bound
+   * CPU on pathological inputs. Omit to disable.
+   */
   maxWorkUnits?: number
+  /**
+   * Return output→source provenance: `"page"` for page-level (PDF), `"off"`
+   * (default) for none. Output byte ranges in `provenance` index the returned
+   * `markdown` as UTF-8 bytes; slice with `Buffer.from(markdown).subarray(...)`.
+   */
   provenance?: string
 }

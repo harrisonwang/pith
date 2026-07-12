@@ -6,9 +6,12 @@ from typing import Any
 from . import _native
 from .exceptions import SpoorError
 from .types import (
+    LocatedQuote,
+    LocateMethod,
     ParseResult,
     Provenance,
     ProvenanceSpan,
+    QuoteSpan,
     SourceAnchor,
     SpoorWarning,
     TextRange,
@@ -18,9 +21,12 @@ from .types import (
 )
 
 __all__ = [
+    "LocateMethod",
+    "LocatedQuote",
     "ParseResult",
     "Provenance",
     "ProvenanceSpan",
+    "QuoteSpan",
     "SourceAnchor",
     "SpoorError",
     "SpoorWarning",
@@ -29,6 +35,7 @@ __all__ = [
     "WarningLocation",
     "detect_format",
     "extract_media",
+    "locate_quote",
     "parse_bytes",
     "parse_path",
 ]
@@ -138,6 +145,33 @@ def extract_media(
         )
     except _native.SpoorError as error:
         raise SpoorError.from_native(error) from None
+
+
+def locate_quote(markdown: str, quote: str) -> LocatedQuote | None:
+    """Ground an LLM-cited quote in Markdown spoor produced.
+
+    Tries four deterministic tiers, strictest first: exact substring,
+    whitespace-insensitive, table-cell anchor (a model quoting table data
+    reassembles "column + row label + value" into a string that is never
+    contiguous in a Markdown table), and numeric/unit equivalence
+    (7771亿 = 777102百万). Returns ``None`` when no tier matches — the quote is
+    not in the document, so treat the claim it backs as unverifiable.
+
+    ``result.span`` indexes ``markdown`` as a Python ``str``:
+    ``markdown[span["start"]:span["end"]]`` is the raw hit. ``result.page`` is
+    read from spoor's own ``## Page N`` markers when present.
+    """
+    raw = _native.locate_quote(markdown, quote)
+    if raw is None:
+        return None
+    return LocatedQuote(
+        span=raw["span"],
+        before=raw["before"],
+        hit=raw["hit"],
+        after=raw["after"],
+        page=raw["page"],
+        method=raw["method"],
+    )
 
 
 def detect_format(

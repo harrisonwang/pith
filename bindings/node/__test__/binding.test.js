@@ -4,7 +4,7 @@ const assert = require('node:assert/strict');
 const { readFileSync } = require('node:fs');
 const { join } = require('node:path');
 const test = require('node:test');
-const { detectFormat, parseBytes, extractMedia } = require('..');
+const { detectFormat, parseBytes, extractMedia, locateQuote } = require('..');
 
 test('detects and parses text bytes', () => {
   const input = Buffer.from('hello spoor\n');
@@ -139,4 +139,36 @@ test('exposes stable structured error fields', () => {
       && error.stage === 'detect'
       && error.recoverable === false,
   );
+});
+
+test('locates quotes across the four deterministic tiers', () => {
+  const md = [
+    '## Page 1',
+    '',
+    '| 指标 | 2023A | 2024A |',
+    '| 营业总收入（百万元） | 602315 | 777102 |',
+    '| 归母净利润（百万元） | 30041 | 53128 |',
+    '',
+    '## Page 2',
+    '',
+    '比亚迪 2024 年实现营业总收入 7,771.02 亿元，同比增长 29.0%。',
+    '',
+  ].join('\n');
+
+  const exact = locateQuote(md, '同比增长 29.0%');
+  assert.equal(exact.method, 'exact');
+  // The span is in UTF-16 code units: String.prototype.slice recovers the hit.
+  assert.equal(md.slice(exact.span.start, exact.span.end), '同比增长 29.0%');
+  assert.equal(exact.page, 2);
+
+  const row = locateQuote(md, '2024A 归母净利润（百万元） 53128');
+  assert.equal(row.method, 'table_anchor');
+  assert.ok(row.hit.includes('53128'));
+
+  const converted = locateQuote(md, '营业总收入 7771.5 亿');
+  assert.equal(converted.method, 'numeric_equivalence');
+  assert.ok(converted.hit.includes('777102'));
+
+  assert.equal(locateQuote(md, '海外收入 9999 亿'), null);
+  assert.equal(locateQuote(md, ''), null);
 });
