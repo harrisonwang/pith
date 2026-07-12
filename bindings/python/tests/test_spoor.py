@@ -236,3 +236,20 @@ def test_keep_repeated_regions_retains_verbatim_text() -> None:
     assert markdown.count("ACME Corp Annual Report 2026") == 4
     codes = [warning["code"] for warning in result.warnings]
     assert "pdf_repeated_region_deduplicated" not in codes
+
+
+def test_block_provenance_carries_line_boxes() -> None:
+    # Block level refines page level: real text lines carry a PDF-native
+    # (y-up) bbox, rewritten/separator bytes stay page-anchored without one.
+    result = parse_path(FIXTURES / "pdf/09_outline.pdf", provenance="block")
+    assert result.provenance is not None
+    spans = result.provenance.spans
+    boxed = [s for s in spans if s["source"].get("bbox")]
+    assert boxed, spans
+    assert any(s["source"].get("bbox") is None for s in spans)
+    markdown = result.content.value.markdown.encode("utf-8")
+    first = boxed[0]
+    text = markdown[first["output"]["start"] : first["output"]["end"]].decode("utf-8")
+    assert text.strip()
+    bbox = first["source"]["bbox"]
+    assert bbox["y1"] > bbox["y0"] and bbox["x1"] > bbox["x0"]

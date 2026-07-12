@@ -227,7 +227,7 @@ fn page_provenance_maps_output_ranges_back_to_source_pages() {
     let mut previous_end = 0;
     for (index, span) in provenance.spans.iter().enumerate() {
         let number = index + 1;
-        assert_eq!(span.source, SourceAnchor::Page { number });
+        assert_eq!(span.source, SourceAnchor::Page { number, bbox: None });
         // Ordered and non-overlapping.
         assert!(span.output.start >= previous_end);
         assert!(span.output.end > span.output.start);
@@ -257,7 +257,13 @@ fn page_provenance_follows_the_page_slice() {
     let result = parse(&request).unwrap();
     let provenance = result.provenance.as_ref().expect("provenance requested");
     assert_eq!(provenance.spans.len(), 1);
-    assert_eq!(provenance.spans[0].source, SourceAnchor::Page { number: 2 });
+    assert_eq!(
+        provenance.spans[0].source,
+        SourceAnchor::Page {
+            number: 2,
+            bbox: None
+        }
+    );
 }
 
 #[test]

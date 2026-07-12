@@ -58,6 +58,15 @@ impl PdfLayoutDocument {
     }
 }
 
+/// A reconstructed line ready for block-level provenance: its text plus the
+/// approximate bounding box already converted to PDF-native user space
+/// (y-up, same system as `/MediaBox`). `None` bbox = geometry not trusted.
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct PageAnchorLine {
+    pub(crate) text: String,
+    pub(crate) bbox: Option<crate::result::Rect>,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct PdfLayoutPage {
     pub(crate) number: usize,
@@ -72,6 +81,9 @@ pub(crate) struct PdfLayoutPage {
     /// path cannot convey. Drives both the in-body figure marker and the
     /// `vector_graphics_omitted` warning, mirroring how images drive theirs.
     pub(crate) has_vector_figure: bool,
+    /// Reading-order lines for block-level provenance; empty unless the
+    /// caller requested block level and span geometry was available.
+    pub(crate) anchor_lines: Vec<PageAnchorLine>,
     pub(crate) diagnostics: Vec<PdfLayoutDiagnostic>,
 }
 
@@ -115,6 +127,7 @@ impl PdfLayoutPage {
             images,
             links: Vec::new(),
             has_vector_figure,
+            anchor_lines: Vec::new(),
             diagnostics: Vec::new(),
         }
     }
@@ -220,22 +233,31 @@ pub(crate) struct PdfFontFlags {
     pub(crate) monospace: bool,
 }
 
-/// Reconstruct reading-order text from a page's positioned spans.
+/// One visual line reconstructed from positioned spans: its text plus an
+/// approximate bounding box in engine space (y-down, origin at the page's
+/// top-left). `bbox` is `None` when the line's geometry is not trustworthy
+/// (NaN coordinates from degenerate transforms).
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct OrderedLine {
+    pub(crate) text: String,
+    pub(crate) bbox: Option<PdfRect>,
+}
+
+/// Reconstruct reading-order lines from a page's positioned spans.
 ///
-/// Returns the ordered text and whether a multi-column layout was detected and
-/// applied. Returns `None` when there are no spans to work with, so the caller
-/// keeps the existing content-stream-ordered text. Geometry alone is used (no
-/// ML); the detection is deliberately conservative — when a page is not
-/// confidently multi-column it is treated as a single column, which renders the
-/// same top-to-bottom order the flat path already produces.
-pub(crate) fn reading_order_text(page: &EnginePage) -> Option<(String, bool)> {
+/// Returns the ordered lines and whether a multi-column layout was detected
+/// and applied. Returns `None` when there are no spans to work with. Geometry
+/// alone is used (no ML); the detection is deliberately conservative — when a
+/// page is not confidently multi-column it is treated as a single column,
+/// which renders the same top-to-bottom order the flat path already produces.
+pub(crate) fn reading_order_lines(page: &EnginePage) -> Option<(Vec<OrderedLine>, bool)> {
     if page.spans.is_empty() {
         return None;
     }
     let columns = detect_column_ranges(&page.spans, page.width);
     let multi_column = columns.len() > 1;
 
-    let mut lines: Vec<Line> = Vec::new();
+    let mut lines: Vec<OrderedLine> = Vec::new();
     for (lo, hi) in &columns {
         let mut col: Vec<&EngineSpan> = page
             .spans
@@ -252,7 +274,13 @@ pub(crate) fn reading_order_text(page: &EnginePage) -> Option<(String, bool)> {
             .collect();
         lines.extend(group_lines(&mut col));
     }
+    Some((lines, multi_column))
+}
 
+/// Reading-order text: the ordered lines joined with newlines. Kept as the
+/// text-only view over [`reading_order_lines`] so both stay byte-identical.
+pub(crate) fn reading_order_text(page: &EnginePage) -> Option<(String, bool)> {
+    let (lines, multi_column) = reading_order_lines(page)?;
     let text = lines
         .iter()
         .map(|line| line.text.as_str())
@@ -261,20 +289,16 @@ pub(crate) fn reading_order_text(page: &EnginePage) -> Option<(String, bool)> {
     Some((text, multi_column))
 }
 
-struct Line {
-    text: String,
-}
-
 /// Group a column's spans into visual lines (by baseline proximity), ordered
 /// top-to-bottom, with each line's spans ordered left-to-right.
-fn group_lines(spans: &mut [&EngineSpan]) -> Vec<Line> {
+fn group_lines(spans: &mut [&EngineSpan]) -> Vec<OrderedLine> {
     spans.sort_by(|a, b| {
         a.y.partial_cmp(&b.y)
             .unwrap_or(Ordering::Equal)
             .then(a.x0.partial_cmp(&b.x0).unwrap_or(Ordering::Equal))
     });
 
-    let mut lines: Vec<Line> = Vec::new();
+    let mut lines: Vec<OrderedLine> = Vec::new();
     let mut current: Vec<&EngineSpan> = Vec::new();
     let mut current_y = 0.0_f64;
     for span in spans.iter() {
@@ -296,15 +320,41 @@ fn group_lines(spans: &mut [&EngineSpan]) -> Vec<Line> {
     lines
 }
 
-fn finish_line(spans: &mut Vec<&EngineSpan>) -> Line {
+fn finish_line(spans: &mut Vec<&EngineSpan>) -> OrderedLine {
     spans.sort_by(|a, b| a.x0.partial_cmp(&b.x0).unwrap_or(Ordering::Equal));
     let text = spans
         .iter()
         .map(|span| span.text.as_str())
         .collect::<Vec<_>>()
         .join(" ");
+    let bbox = line_bbox(spans);
     spans.clear();
-    Line { text }
+    OrderedLine { text, bbox }
+}
+
+/// Approximate a line's box from its spans' baseline geometry: ascent ≈ font
+/// size above the baseline, descent ≈ a quarter below. Engine space (y-down).
+/// `None` when any coordinate is non-finite — no box is better than a wrong
+/// one.
+fn line_bbox(spans: &[&EngineSpan]) -> Option<PdfRect> {
+    let mut x0 = f64::INFINITY;
+    let mut x1 = f64::NEG_INFINITY;
+    let mut top = f64::INFINITY;
+    let mut bottom = f64::NEG_INFINITY;
+    for span in spans {
+        let size = span.font_size.max(1.0);
+        x0 = x0.min(span.x0);
+        x1 = x1.max(span.x1);
+        top = top.min(span.y - size);
+        bottom = bottom.max(span.y + size * 0.25);
+    }
+    let finite = x0.is_finite() && x1.is_finite() && top.is_finite() && bottom.is_finite();
+    (finite && x1 > x0 && bottom > top).then_some(PdfRect {
+        x0: x0 as f32,
+        y0: top as f32,
+        x1: x1 as f32,
+        y1: bottom as f32,
+    })
 }
 
 /// Detect column x-ranges. Returns a single full-width range unless a clear

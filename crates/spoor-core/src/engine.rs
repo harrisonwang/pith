@@ -43,6 +43,12 @@ pub enum ProvenanceLevel {
     Off,
     /// One mapping per source page (currently PDF). Coarse and small.
     Page,
+    /// One mapping per rendered line with an approximate bounding box
+    /// (currently PDF, born-digital only). Fine-grained and larger; lines
+    /// whose text was rewritten during rendering or whose geometry is not
+    /// trustworthy fall back to page-anchored spans without a box, so every
+    /// output byte still resolves to a page.
+    Block,
 }
 
 impl FromStr for ProvenanceLevel {
@@ -54,8 +60,9 @@ impl FromStr for ProvenanceLevel {
         match value {
             "off" => Ok(Self::Off),
             "page" => Ok(Self::Page),
+            "block" => Ok(Self::Block),
             other => Err(SpoorError::parse_failed(
-                format!("provenance 级别无效：{other}，支持 off 和 page。"),
+                format!("provenance 级别无效：{other}，支持 off、page 和 block。"),
                 ParseStage::Parse,
             )),
         }
@@ -500,6 +507,7 @@ fn parse_document_with_format(
         format,
         &request.document_filter,
         request.limits.max_parse_bytes,
+        request.provenance,
     )
     .map_err(|error| SpoorError::from_anyhow(error, ParseStage::Parse))?;
     ensure_parse_size(
@@ -513,9 +521,10 @@ fn parse_document_with_format(
     // when the caller asked, so `Off` stays byte-for-byte identical to before.
     let provenance = match request.provenance {
         ProvenanceLevel::Off => None,
-        ProvenanceLevel::Page => (!extracted.provenance.is_empty()).then_some(Provenance {
-            spans: extracted.provenance,
-        }),
+        ProvenanceLevel::Page | ProvenanceLevel::Block => (!extracted.provenance.is_empty())
+            .then_some(Provenance {
+                spans: extracted.provenance,
+            }),
     };
 
     Ok(DocumentParse {

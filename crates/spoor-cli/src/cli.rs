@@ -51,12 +51,16 @@ impl From<ModeArg> for OutputMode {
 pub(crate) enum ProvenanceArg {
     /// One mapping per source page (PDF page-level).
     Page,
+    /// One mapping per rendered line with an approximate bounding box
+    /// (PDF, born-digital); unmatched bytes stay page-anchored.
+    Block,
 }
 
 impl From<ProvenanceArg> for ProvenanceLevel {
     fn from(value: ProvenanceArg) -> Self {
         match value {
             ProvenanceArg::Page => ProvenanceLevel::Page,
+            ProvenanceArg::Block => ProvenanceLevel::Block,
         }
     }
 }
@@ -186,8 +190,8 @@ pub(crate) struct Cli {
     #[arg(long, value_name = "n")]
     pub(crate) max_work_units: Option<usize>,
 
-    /// 输出原文定位映射。当前支持 page（PDF 页级）。仅限单文件输入。
-    /// 输出为 JSON，包含 markdown 与 provenance。
+    /// 输出原文定位映射。支持 page（PDF 页级）与 block（行级+坐标）。
+    /// 仅限单文件输入。输出为 JSON，包含 markdown 与 provenance。
     #[arg(
         long,
         value_enum,

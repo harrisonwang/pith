@@ -5,8 +5,8 @@ use common::{extract_fixture, extract_fixture_err, parse_fixture};
 use insta::assert_snapshot;
 use serde_json::json;
 use spoor_core::{
-    DocumentFilter, Format, ParseContent, ParseRequest, WarningCode, WarningLocation,
-    parse_document, parse_document_result,
+    DocumentFilter, Format, ParseContent, ParseRequest, ProvenanceLevel, SourceAnchor, WarningCode,
+    WarningLocation, parse_document, parse_document_result,
 };
 
 #[test]
@@ -244,6 +244,69 @@ fn line_end_hyphenation_rejoins_conservatively() {
     assert!(
         out.contains("UTF-\n8"),
         "digit/uppercase continuations stay split:\n{out}"
+    );
+}
+
+#[test]
+fn block_provenance_anchors_lines_with_boxes_and_refines_page_level() {
+    let path = std::path::Path::new("tests/fixtures/pdf/09_outline.pdf");
+    let bytes = std::fs::read(path).expect("read fixture");
+    let mut request = ParseRequest::new(&bytes);
+    request.source_name = path.to_str();
+    request.format_hint = Some(Format::Pdf);
+    request.provenance = ProvenanceLevel::Block;
+
+    let result = parse_document_result(&request).expect("parse with block provenance");
+    let ParseContent::Document(document) = &result.content else {
+        panic!("expected document result");
+    };
+    let markdown = document.markdown.as_bytes();
+    let spans = &result
+        .provenance
+        .as_ref()
+        .expect("provenance present")
+        .spans;
+
+    // Ordered, non-overlapping, and every span page-anchored.
+    let mut previous = 0usize;
+    for span in spans.iter() {
+        assert!(span.output.start >= previous, "spans must not overlap");
+        assert!(span.output.end > span.output.start);
+        previous = span.output.end;
+        let SourceAnchor::Page { number, .. } = span.source;
+        assert!((1..=2).contains(&number));
+    }
+
+    // The promoted heading line is anchored with a box that covers exactly
+    // the line text (the "### " prefix stays in a page-anchored gap), and the
+    // box is expressed in PDF-native user space (y-up, on a 792pt-high page).
+    let heading = spans
+        .iter()
+        .find(|span| {
+            std::str::from_utf8(&markdown[span.output.start..span.output.end])
+                .is_ok_and(|text| text == "Introduction")
+        })
+        .expect("heading line span");
+    let SourceAnchor::Page {
+        number,
+        bbox: Some(bbox),
+    } = &heading.source
+    else {
+        panic!("heading line must carry a bbox: {:?}", heading.source);
+    };
+    assert_eq!(*number, 1);
+    assert!((bbox.x0 - 72.0).abs() < 1.0, "x0 = {}", bbox.x0);
+    assert!(
+        bbox.y1 > bbox.y0 && bbox.y0 > 700.0 && bbox.y1 < 745.0,
+        "{bbox:?}"
+    );
+
+    // Block level refines page level: some spans carry no box (headers,
+    // separators) but still resolve to a page.
+    assert!(
+        spans
+            .iter()
+            .any(|span| matches!(span.source, SourceAnchor::Page { bbox: None, .. }))
     );
 }
 

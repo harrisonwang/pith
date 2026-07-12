@@ -196,3 +196,20 @@ test('repeated page furniture deduplicates by default and keepRepeatedRegions re
     (warning) => warning.code === 'pdf_repeated_region_deduplicated',
   ));
 });
+
+test('block provenance carries line boxes and page-anchored gaps', (t) => {
+  const pdf = readFileSync(join(
+    __dirname,
+    '../../../crates/spoor-cli/tests/fixtures/pdf/09_outline.pdf',
+  ));
+  const result = parseBytes(pdf, { sourceName: 'doc.pdf', provenance: 'block' });
+  const spans = result.provenance.spans;
+  const boxed = spans.filter((span) => span.source.bbox);
+  assert.ok(boxed.length > 0);
+  assert.ok(spans.some((span) => !span.source.bbox));
+  const md = Buffer.from(result.content.value.markdown, 'utf8');
+  const first = boxed[0];
+  const text = md.subarray(first.output.start, first.output.end).toString('utf8');
+  assert.ok(text.trim().length > 0);
+  assert.ok(first.source.bbox.y1 > first.source.bbox.y0);
+});

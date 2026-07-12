@@ -1,5 +1,5 @@
 use crate::detect::Format;
-use crate::engine::{DocumentFilter, TableFilter};
+use crate::engine::{DocumentFilter, ProvenanceLevel, TableFilter};
 use crate::json_schema::TableEntry;
 use crate::result::{ProvenanceSpan, SpoorWarning};
 use crate::source::Source;
@@ -45,7 +45,7 @@ mod xlsx;
 #[cfg(any(feature = "office", feature = "epub"))]
 mod xml;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub(crate) struct ExtractedMarkdown {
     pub markdown: String,
     pub warnings: Vec<SpoorWarning>,
@@ -84,12 +84,13 @@ pub fn extract(
     format: Format,
     document_filter: &DocumentFilter,
     max_parse_bytes: usize,
+    provenance: ProvenanceLevel,
 ) -> Result<ExtractedMarkdown> {
     match format {
         Format::Url => extract_url(source, document_filter, max_parse_bytes),
         Format::Html => extract_html(source, document_filter, max_parse_bytes),
         Format::Markdown => markdown::extract(source).map(ExtractedMarkdown::without_warnings),
-        Format::Pdf => extract_pdf(source, document_filter, max_parse_bytes),
+        Format::Pdf => extract_pdf(source, document_filter, max_parse_bytes, provenance),
         Format::Docx => extract_docx(source, document_filter, max_parse_bytes),
         Format::Xlsx => extract_xlsx(source, document_filter, max_parse_bytes),
         Format::Pptx => extract_pptx(source, document_filter, max_parse_bytes),
@@ -178,8 +179,9 @@ fn extract_pdf(
     source: &Source<'_>,
     document_filter: &DocumentFilter,
     max_parse_bytes: usize,
+    provenance: ProvenanceLevel,
 ) -> Result<ExtractedMarkdown> {
-    pdf::extract(source, document_filter, max_parse_bytes)
+    pdf::extract(source, document_filter, max_parse_bytes, provenance)
 }
 
 #[cfg(not(feature = "pdf"))]
@@ -187,6 +189,7 @@ fn extract_pdf(
     _source: &Source<'_>,
     _document_filter: &DocumentFilter,
     _max_parse_bytes: usize,
+    _provenance: ProvenanceLevel,
 ) -> Result<ExtractedMarkdown> {
     Err(anyhow!(
         "format disabled at compile time; enable feature pdf"

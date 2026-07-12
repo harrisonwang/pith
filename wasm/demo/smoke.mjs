@@ -145,6 +145,16 @@ assert.ok(new TextDecoder().decode(provMd.subarray(start, end)).startsWith('## P
 // Off by default: no provenance field on the result.
 assert.equal(parse_bytes(multipagePdf, 'doc.pdf').provenance, undefined);
 
+// Block-level provenance reaches the WASM host too: real lines carry a
+// PDF-native bbox, separators stay page-anchored without one.
+const blockProv = parse_bytes(
+  multipagePdf, 'doc.pdf', undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, 'block',
+);
+const blockSpans = blockProv.provenance.spans;
+assert.ok(blockSpans.some((span) => span.source.bbox));
+assert.ok(blockSpans.some((span) => !span.source.bbox));
+assert.ok(blockSpans.every((span) => span.source.kind === 'page'));
+
 // Repeated header/footer dedup reaches the WASM host too, with the keep
 // switch as the 14th positional arg.
 const furniturePdf = await readFile(new URL(

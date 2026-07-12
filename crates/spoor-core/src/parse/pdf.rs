@@ -1,14 +1,16 @@
-use crate::engine::DocumentFilter;
+use crate::engine::{DocumentFilter, ProvenanceLevel};
 use crate::error::StructuredError;
 use crate::limits;
+use crate::locate::Locator;
 use crate::parse::ExtractedMarkdown;
 use crate::parse::pdf_layout::{
-    PdfImageObject, PdfLayoutDocument, PdfLayoutPage, reading_order_text,
+    PageAnchorLine, PdfImageObject, PdfLayoutDocument, PdfLayoutPage, reading_order_lines,
+    reading_order_text,
 };
 use crate::parse::pdf_media;
 #[cfg(test)]
 use crate::parse::pdf_media::PageImage;
-use crate::result::{ProvenanceSpan, SourceAnchor, SpoorWarning, TextRange, WarningCode};
+use crate::result::{ProvenanceSpan, Rect, SourceAnchor, SpoorWarning, TextRange, WarningCode};
 use crate::source::Source;
 use anyhow::{Result, anyhow};
 
@@ -30,6 +32,7 @@ pub fn extract(
     source: &Source<'_>,
     document_filter: &DocumentFilter,
     max_parse_bytes: usize,
+    provenance: ProvenanceLevel,
 ) -> Result<ExtractedMarkdown> {
     let page_range = document_filter.page_range;
 
@@ -158,7 +161,7 @@ pub fn extract(
                     .is_some_and(|page| is_vector_figure(&page.vector))
         })
         .collect();
-    let layout =
+    let mut layout =
         PdfLayoutDocument::from_numbered_page_text_and_images(pages, images, vector_figures);
 
     // A PDF with no text layer is only a dead end when it also has no images to
@@ -169,7 +172,35 @@ pub fn extract(
         return Err(StructuredError::pdf_no_extractable_content().into());
     }
 
-    let (markdown, provenance) = render_layout(&layout);
+    // Block-level provenance wants each rendered line anchored to a box on its
+    // page, so attach the reading-order lines (bbox converted to PDF-native
+    // y-up user space) to the pages that have trustworthy span geometry.
+    let block_level = matches!(provenance, ProvenanceLevel::Block);
+    if block_level {
+        for page in layout.pages.iter_mut() {
+            let Some(engine_page) = span_pages.get(&page.number) else {
+                continue;
+            };
+            let Some((lines, _)) = reading_order_lines(engine_page) else {
+                continue;
+            };
+            let height = engine_page.height as f32;
+            page.anchor_lines = lines
+                .into_iter()
+                .map(|line| PageAnchorLine {
+                    bbox: line.bbox.filter(|_| height > 0.0).map(|engine_box| Rect {
+                        x0: engine_box.x0,
+                        y0: height - engine_box.y1,
+                        x1: engine_box.x1,
+                        y1: height - engine_box.y0,
+                    }),
+                    text: line.text,
+                })
+                .collect();
+        }
+    }
+
+    let (markdown, provenance) = render_layout(&layout, block_level);
     limits::ensure_parse_size(markdown.len(), max_parse_bytes, "PDF Markdown rendering")?;
 
     let mut warnings = layout_warnings(&layout);
@@ -195,17 +226,19 @@ pub fn extract(
 #[cfg(test)]
 fn render_pages(pages: &[String], images: &[Vec<PageImage>]) -> String {
     let layout = PdfLayoutDocument::from_page_text_and_images(pages.to_vec(), images.to_vec());
-    render_layout(&layout).0
+    render_layout(&layout, false).0
 }
 
-/// Render the page-oriented Markdown and, alongside it, a page-level provenance
-/// span per page: the half-open byte range its `## Page N` block occupies in the
-/// returned Markdown, mapped to that source page. Computing it here is free —
-/// each page's start/end offset is already known while concatenating.
-fn render_layout(layout: &PdfLayoutDocument) -> (String, Vec<ProvenanceSpan>) {
+/// Render the page-oriented Markdown and, alongside it, the provenance spans:
+/// page-level (one span per `## Page N` block, free to compute while
+/// concatenating) or, when `block_level` is set, line-level — each
+/// reconstructed line anchored inside its page block with its box, and every
+/// unanchored byte covered by a page-anchored gap span, so block level is a
+/// strict refinement of page level.
+fn render_layout(layout: &PdfLayoutDocument, block_level: bool) -> (String, Vec<ProvenanceSpan>) {
     let mut markdown = String::new();
     let mut image_number = 0usize;
-    let mut spans = Vec::with_capacity(layout.pages.len());
+    let mut blocks = Vec::with_capacity(layout.pages.len());
 
     for (index, page) in layout.pages.iter().enumerate() {
         if index > 0 {
@@ -217,18 +250,103 @@ fn render_layout(layout: &PdfLayoutDocument) -> (String, Vec<ProvenanceSpan>) {
         // back to this page; the 2-byte gap between blocks belongs to no page.
         let start = markdown.len();
         render_page(page, &mut markdown, &mut image_number);
-        spans.push(ProvenanceSpan {
-            output: TextRange {
-                start,
-                end: markdown.len(),
-            },
-            source: SourceAnchor::Page {
-                number: page.number,
-            },
-        });
+        blocks.push((page, start, markdown.len()));
+    }
+
+    let mut spans = Vec::new();
+    for (page, start, end) in blocks {
+        let block = TextRange { start, end };
+        if block_level && !page.anchor_lines.is_empty() {
+            spans.extend(anchor_page_lines(
+                &markdown,
+                block,
+                page.number,
+                &page.anchor_lines,
+            ));
+        } else {
+            spans.push(ProvenanceSpan {
+                output: block,
+                source: SourceAnchor::Page {
+                    number: page.number,
+                    bbox: None,
+                },
+            });
+        }
     }
 
     (markdown, spans)
+}
+
+/// Anchor a page's reconstructed lines inside its rendered block, in order.
+///
+/// Each line is searched whitespace-insensitively from a forward-moving
+/// cursor (rendering preserves line order, so a later line never legitimately
+/// matches earlier). A line whose text was rewritten during rendering (link
+/// weaving, table reflow) or removed (furniture dedup) finds no match and its
+/// bytes stay in a page-anchored gap span — no box is better than a wrong
+/// box. Trailing break hyphens and soft hyphens are stripped from the needle
+/// because dehyphenation removed them from the rendered text; the hit then
+/// covers the line's surviving prefix.
+fn anchor_page_lines(
+    markdown: &str,
+    block: TextRange,
+    number: usize,
+    lines: &[PageAnchorLine],
+) -> Vec<ProvenanceSpan> {
+    let slice = &markdown[block.start..block.end];
+    let locator = Locator::new(slice);
+
+    let mut hits: Vec<(usize, usize, Option<Rect>)> = Vec::new();
+    let mut cursor = 0usize;
+    for line in lines {
+        let needle: String = line
+            .text
+            .trim()
+            .trim_end_matches(['-', '\u{2010}'])
+            .chars()
+            .filter(|ch| *ch != '\u{00AD}')
+            .collect();
+        if needle.is_empty() {
+            continue;
+        }
+        let hit = locator
+            .all_occurrences(&needle)
+            .into_iter()
+            .find(|(start, _)| *start >= cursor);
+        let Some((start, end)) = hit else {
+            continue;
+        };
+        hits.push((start, end, line.bbox));
+        cursor = end;
+    }
+
+    let mut spans = Vec::new();
+    let mut previous = block.start;
+    let gap = |from: usize, to: usize| ProvenanceSpan {
+        output: TextRange {
+            start: from,
+            end: to,
+        },
+        source: SourceAnchor::Page { number, bbox: None },
+    };
+    for (start, end, bbox) in hits {
+        let (absolute_start, absolute_end) = (block.start + start, block.start + end);
+        if absolute_start > previous {
+            spans.push(gap(previous, absolute_start));
+        }
+        spans.push(ProvenanceSpan {
+            output: TextRange {
+                start: absolute_start,
+                end: absolute_end,
+            },
+            source: SourceAnchor::Page { number, bbox },
+        });
+        previous = absolute_end;
+    }
+    if block.end > previous {
+        spans.push(gap(previous, block.end));
+    }
+    spans
 }
 
 fn render_page(page: &PdfLayoutPage, markdown: &mut String, image_number: &mut usize) {
@@ -512,7 +630,7 @@ mod tests {
             "figure page must warn"
         );
 
-        let markdown = super::render_layout(&layout).0;
+        let markdown = super::render_layout(&layout, false).0;
         assert!(
             markdown.contains("spoor://pdf/page/1"),
             "figure page must carry an extractable page handle: {markdown}"
@@ -533,7 +651,7 @@ mod tests {
                 .any(|w| w.code == WarningCode::VectorGraphicsOmitted)
         );
         assert!(
-            !super::render_layout(&layout)
+            !super::render_layout(&layout, false)
                 .0
                 .contains("spoor://pdf/page/")
         );

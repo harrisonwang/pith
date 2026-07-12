@@ -139,13 +139,13 @@ impl ParseStats {
 /// source, so a caller can ground an LLM's quote in an exact location instead
 /// of trusting the model's self-citation. Opt-in via `ParseRequest.provenance`;
 /// absent (and not serialized) when provenance was not requested.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Provenance {
     /// Output→source mappings, ordered by `output.start` and non-overlapping.
     pub spans: Vec<ProvenanceSpan>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ProvenanceSpan {
     /// Where this run sits in the returned Markdown.
     pub output: TextRange,
@@ -163,17 +163,40 @@ pub struct TextRange {
     pub end: usize,
 }
 
-/// Where a span of output came from in the source. A tagged enum (like
-/// [`WarningLocation`]) so more anchor kinds (input byte ranges, table cells,
-/// born-digital bounding boxes) can be added without breaking consumers.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(tag = "kind", rename_all = "snake_case")]
-pub enum SourceAnchor {
-    /// Page-oriented formats (currently PDF): the 1-based source page number.
-    Page { number: usize },
+/// An axis-aligned rectangle in PDF user space (same coordinate system as the
+/// page's `/MediaBox`): y grows upward, `y0` is the bottom edge, `y1` the top.
+/// Values are PDF points. Consumers rendering with PDF.js can convert with
+/// `viewport.convertToViewportRectangle([x0, y0, x1, y1])` directly. The box
+/// approximates the glyph extent from baseline geometry (ascent ≈ font size,
+/// descent ≈ 0.25 × font size); it is a highlight target, not a typographic
+/// measurement.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct Rect {
+    pub x0: f32,
+    pub y0: f32,
+    pub x1: f32,
+    pub y1: f32,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+/// Where a span of output came from in the source. A tagged enum (like
+/// [`WarningLocation`]) so more anchor kinds (input byte ranges, table cells)
+/// can be added without breaking consumers.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum SourceAnchor {
+    /// Page-oriented formats (currently PDF): the 1-based source page number,
+    /// plus — at block-level provenance, for born-digital lines whose
+    /// geometry is trustworthy — the approximate bounding box on that page.
+    /// Absent `bbox` means "somewhere on this page" (page-level spans, and
+    /// block-level gaps whose text was rewritten or has no usable geometry).
+    Page {
+        number: usize,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        bbox: Option<Rect>,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ParseResult {
     pub content: ParseContent,
     pub warnings: Vec<SpoorWarning>,

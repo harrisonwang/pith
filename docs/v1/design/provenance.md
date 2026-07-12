@@ -1,6 +1,6 @@
 # 来源定位（Provenance）设计
 
-状态：**M1 已落地（PDF 页级）**。M2（块级 + 坐标）、M3（线性格式与表格）为后续计划，本文同时记录已实现行为与后续方向。
+状态：**M1（PDF 页级）与 M2（行级 + 坐标）已落地**。M3（线性格式与表格）为后续计划，本文同时记录已实现行为与后续方向。
 
 ## 一句话
 
@@ -45,10 +45,10 @@ pub struct TextRange { pub start: usize, pub end: usize }  // UTF-8 字节区间
 
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum SourceAnchor {
-    /// 页式格式（当前 PDF）：1-based 源页码。
-    Page { number: usize },
-    // M2/M3 计划新增：
-    //   Page 增加 bbox: Option<Rect>（born-digital 坐标矩形）
+    /// 页式格式（当前 PDF）：1-based 源页码；block 级下 born-digital 行
+    /// 附近似包围盒（PDF 原生用户空间，y 向上，与 /MediaBox 同坐标系）。
+    Page { number: usize, bbox: Option<Rect> },
+    // M3 计划新增：
     //   Input { start, end }（纯文本 / Markdown 的原文字节区间）
     //   Cell { sheet, row, column }（表格单元格）
 }
@@ -68,7 +68,7 @@ pub enum SourceAnchor {
 
 | 格式 | 锚点 | 状态 |
 | --- | --- | --- |
-| PDF | `Page { number }` | **已落地（M1）**；bbox 来自字形几何，仅 born-digital，M2 |
+| PDF | `Page { number, bbox }` | **页级与行级均已落地（M1+M2）**；bbox 来自字形几何（基线 ± 字号近似），仅 born-digital |
 | 纯文本 / Markdown | `Input { start, end }` | 计划（M3）：输入即线性 UTF-8，输出≈输入，区间直接可给 |
 | CSV / XLSX | `Cell { sheet, row, column }` | 计划（M3）：表格已能用 `sheet`/`rows`/`columns` 定位，锚点为补充 |
 | DOCX / PPTX / HTML / EPUB | — | 需要解析器保留段落/slide/元素序号，成本较高，更靠后 |
@@ -78,7 +78,7 @@ pub enum SourceAnchor {
 `ParseRequest` 上的等级开关，**默认关闭**：
 
 ```rust
-pub enum ProvenanceLevel { Off, Page }   // 默认 Off；Block 在 M2 加入
+pub enum ProvenanceLevel { Off, Page, Block }   // 默认 Off
 
 pub struct ParseRequest<'a> {
     // ...现有字段
@@ -88,7 +88,9 @@ pub struct ParseRequest<'a> {
 
 - `Off`：不产出 `provenance`（与今天完全一致）。
 - `Page`：PDF 每页一条 span。粒度粗、条目少。**已落地。**
-- `Block`（M2）：PDF 每个段落/块一条 span，带 `bbox`。粒度细、条目多。
+- `Block`：PDF 每条重建行一条 span，带 `bbox`；被渲染改写（链接织入、表格重排）
+  或几何不可信的字节落在无 bbox 的页级 gap span 里，因此 Block 是 Page 的严格
+  细化——任何输出字节都仍能解析到页。**已落地。**
 
 **为什么默认关闭、还要分级**：调研里一条硬约束是"边界税"——纯 Rust 引擎如果默认跨 WASM/PyO3/napi 边界吐一大堆 span，序列化开销会把自己的速度优势吃光。所以来源定位必须是**按需、可控量**的：要的人开，开多细自己定。这跟现有的页/表筛选是同一套"只返回被要的那部分"的设计原则。
 
@@ -101,11 +103,12 @@ pub struct ParseRequest<'a> {
 - 页码跟随源页：`--pages 2:2` 时只有一条 span，仍锚定源第 2 页。
 - 四宿主贯通（CLI `--provenance page`、Python/Node/WASM `provenance` 选项）+ 测试。
 
-**M2 · 块级 + 坐标**
-- `ProvenanceLevel::Block`，PDF born-digital；`SourceAnchor::Page` 增加 `bbox`，新增 `Rect`。
-- 给 `EngineSpan` 补垂直范围（现在只有 baseline `y` 和 `font_size`，缺上下边界），打通 `span → line → block` 并算每块 `bbox`（内部 `PdfRect` 已存在，复用）。
-- 多栏重排页：markdown 与区间都按**重排后**的文本生成，所以 `output` 区间与 `bbox` 仍一一对应。
-- 注意：`Rect` 用 f32，引入后 `ParseResult` 需移除 `Eq` 派生（保留 `PartialEq`）。
+**M2 · 行级 + 坐标 ✅ 已落地**
+- `ProvenanceLevel::Block`，PDF born-digital；`SourceAnchor::Page` 增加可选 `bbox`，新增 `Rect`（f32，`ParseResult` 已改为仅 `PartialEq`）。
+- 实现取行级粒度：几何行（`reading_order_lines`）在最终渲染文本中按前进游标做空白不敏感匹配（复用 locate 索引），行框 = 基线 ± 字号近似（ascent ≈ 1.0×、descent ≈ 0.25×字号）。
+- 坐标系：PDF 原生用户空间（y 向上，与 `/MediaBox` 一致），PDF.js 可直接 `convertToViewportRectangle`。
+- 断词行去掉行尾连字符后按前缀匹配；标题行匹配在 `### ` 前缀之后；被链接织入/表格重排改写的行与被去重的页眉页脚自然落空，字节归入无 bbox 的页级 gap。
+- 多栏重排页：markdown 与区间都按**重排后**的文本生成，`output` 区间与 `bbox` 一一对应。
 
 **M3 · 线性格式与表格**
 - 纯文本 / Markdown 给 `Input { start, end }`。
@@ -121,8 +124,8 @@ pub struct ParseRequest<'a> {
 ## 跨宿主暴露（已落地）
 
 - core：`ParseResult.provenance` + `ParseRequest.provenance`（`ProvenanceLevel`）。
-- CLI：`--provenance page`（默认 off）。开启时 stdout 输出整个 `ParseResult` 的 JSON（含 markdown 与 provenance），**仅支持单个文档型输入**（偏移针对单份 markdown）；与 `--mode`、`--extract` 互斥；表格型报友好错误。仍受 `--max-output-kib` 约束（超限报错而非截断，避免破坏 JSON）。
-- Python / Node / WASM：`parse_*` 增加 `provenance` 选项（字符串 `"page"`），返回结构带 `provenance`；只有开启时才序列化，规避边界税。绑定层把整份 `ParseResult` 直接序列化，因此 provenance 自动透传。
+- CLI：`--provenance page|block`（默认 off）。开启时 stdout 输出整个 `ParseResult` 的 JSON（含 markdown 与 provenance），**仅支持单个文档型输入**（偏移针对单份 markdown）；与 `--mode`、`--extract` 互斥；表格型报友好错误。仍受 `--max-output-kib` 约束（超限报错而非截断，避免破坏 JSON）。
+- Python / Node / WASM：`parse_*` 增加 `provenance` 选项（字符串 `"page"`/`"block"`），返回结构带 `provenance`；只有开启时才序列化，规避边界税。绑定层把整份 `ParseResult` 直接序列化，因此 provenance 自动透传。
 
 ## 已定决策
 
