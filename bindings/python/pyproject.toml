@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "pyspoor"
-version = "0.9.1"
+version = "0.10.0"
 description = "Python bindings for the deterministic spoor document engine"
 readme = "README.md"
 requires-python = ">=3.9"
