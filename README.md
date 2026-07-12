@@ -196,7 +196,7 @@ cargo insta review
 
 | 文档 | 内容 |
 | --- | --- |
-| [能力决策与演进规划](docs/capabilities.md) | Agent 场景、调研结论、立即实现项、后续路线与明确边界 |
+| [能力决策与演进规划](docs/v1/design/capabilities.md) | Agent 场景、调研结论、立即实现项、后续路线与明确边界 |
 | [定位与工程规划](docs/v1/planning/overview.md) | 一句话定位、设计原则、交付形态、推进顺序 |
 | [路线图与竞品分析](docs/v1/planning/roadmap.md) | 竞品调研、平台约束、差异化自查 |
 | [架构设计](docs/v1/design/architecture.md) | Core 边界、错误契约、PyO3 接口、迁移顺序 |

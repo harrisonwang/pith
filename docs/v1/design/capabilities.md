@@ -63,7 +63,7 @@ ParseContent + stats
 | --- | --- | --- |
 | DOCX | 标题层级、段落、列表、链接、脚注、小表、Unicode、内嵌图片安全路径占位符 | 合并表格结构、图片/图表语义、comments/endnotes |
 | XLSX | sheet/range/header/preamble/rows、分页筛选、截断诊断 | 公式表达式、语义样式、复杂逻辑表识别 |
-| PDF | 文本层、页边界、无文本页/可疑文本层诊断 | 多栏、标题层级、页眉页脚、断词、链接、表格 |
+| PDF | 文本层、页边界、无文本页/可疑文本层诊断、多栏重排（几何推断 + warning）、空格对齐文本表格重建为 GFM、矢量图页占位与整页 SVG 提取、被裁剪隐形文本抑制 | 标题层级、页眉页脚、断词、链接、复杂视觉表格 |
 | PPTX | slide 边界、文本、小表、speaker notes | shape 阅读顺序、bullet 层级、合并表格、视觉对象语义 |
 | HTML/URL | article/main/body、标题、段落、列表、链接、表格、代码、图片 alt | 完整 readability、相对链接、复杂嵌套 |
 | EPUB | OPF spine 顺序、章节边界、复用 HTML 语义渲染 | 固定版式、图片/音视频、复杂导航 |
@@ -88,6 +88,15 @@ ParseContent + stats
 
 Rust、Python、Node、WASM 均通过同一个 `ParseResult.warnings` 契约获得这些信息。Rust 中需要完整诊断时应调用 `parse` 或 `parse_document_result`；`parse_document` 是只返回 Markdown 的兼容便捷接口，会丢弃 warnings。
 
+### 引文核验
+
+`locate_quote(markdown, quote)`（Rust/Python/Node/WASM 同名导出，Rust 另有可复用
+`Locator`）在 spoor 产出的 Markdown 中定位模型引文，依次尝试四档确定性匹配：
+精确子串、忽略空白、表格单元格锚点、数值/单位换算。命中返回 span、上下文、页码
+与所用档位；四档全部落空时调用方应把对应结论按"无法核验"处理。它与 provenance
+（`--provenance page`）共同构成"引用 → 输出位置 → 源页码"的溯源链路；块级/坐标级
+锚点见 [provenance.md](provenance.md) 的 M2/M3 规划。
+
 ## 调研能力决策
 
 ### 立即加入
@@ -105,7 +114,7 @@ Rust、Python、Node、WASM 均通过同一个 `ParseResult.warnings` 契约获�
 
 | 能力 | Agent 场景 | 前置设计 | 验收门槛 |
 | --- | --- | --- | --- |
-| PDF 多栏阅读顺序 | 学术论文、法律文书、报告进入 RAG | `PdfLayoutIR`：页尺寸、文本 span、bbox、字体、源顺序 | 双栏/三栏/侧注 fixture 不交错；失败显式回退并 warning |
+| ~~PDF 多栏阅读顺序~~（已落地） | 学术论文、法律文书、报告进入 RAG | 内部 `PdfLayoutDocument` IR 已建于 `parse/pdf_layout.rs` | 已实现：按列重排并发 `pdf_multi_column_reading_order` warning，失败回退原始顺序 |
 | PDF 页眉/页脚/水印分类 | 避免重复噪声污染检索与回答 | 跨页位置与文本重复统计 | 默认只分类和去重，不永久删除；提供保留选项 |
 | PDF 标题层级 | 章节分块、父级元数据、目录导航 | outline 优先；字号/字重/编号启发式作为推断 | 输出标注 `source=outline/inferred` 与置信度；不能全部压成同级 |
 | PDF 文本层清洗 | 修复断词、连字、重复绘制 | 基于 span/行模型，Unicode 字符级处理 | 中英文与代码 fixture 不被误合并；禁止字节级 UTF-8 修改 |
@@ -145,13 +154,13 @@ Document
 
 因此当前不增加一个无法保证生效的 core timeout。正确路线是：
 
-1. 为每个解析器定义可测量的 work unit，例如 PDF 对象/操作数、XML event 数、容器 entry 数、表格 cell 数。
-2. 在循环和递归边界执行合作式预算检查，超限返回稳定错误与已知位置。
+1. ~~为每个解析器定义可测量的 work unit~~（已落地：`max_work_units` 与稳定错误 `work_budget_exceeded`）。
+2. ~~在循环和递归边界执行合作式预算检查，超限返回稳定错误与已知位置~~（已落地，见 `limits.rs` 的 work budget）。
 3. CLI/服务端对不可信输入使用独立 worker 进程或容器，由宿主执行真实 wall-clock timeout 和 RSS 限制。
 4. 浏览器将解析放入 Web Worker；超时后终止 Worker，而不是阻塞主线程。
 5. 对每个宿主分别验证 timeout/cancel 真正生效，禁止只验证配置能被传入。
 
-这项能力应列为平台加固 P1，而不是用不可兑现的参数冒充 P0 已完成。
+core 侧合作式预算（第 1、2 步）已落地；剩余第 3–5 步是宿主级配套，仍列为平台加固 P1，而不是用不可兑现的参数冒充 P0 已完成。
 
 ### 后续按信号投入
 
@@ -230,15 +239,20 @@ for warning in result.warnings:
 
 ### 阶段 B：PDF 结构纵深
 
-- 建立 `PdfLayoutIR` 和布局 fixture corpus。
-- 先做多栏阅读顺序和重复区域分类。
-- 再做标题层级、文本清洗和链接。
+状态：进行中（约半程）。
+
+- ~~建立 `PdfLayoutIR`~~：内部 `PdfLayoutDocument` 已建于 `parse/pdf_layout.rs`。
+- ~~多栏阅读顺序~~：已落地（几何列检测 + 重排 + warning）。
+- ~~文本表格重建~~：已落地（空格对齐表格保守重建为 GFM）。
+- 待做：超链接（`PdfLinkAnnotation` 已定义未消费）、标题层级（outline 优先）、页眉/页脚/水印分类、断词清洗。
 - 每项均提供原始顺序回退、推断来源和 warning。
 
 ### 阶段 C：运算量上限与取消
 
-- 设计跨解析器 work unit。
-- 在 XML/PDF/表格循环中合作式检查。
+状态：core 侧已落地，宿主侧待做。
+
+- ~~设计跨解析器 work unit~~：已落地（`max_work_units` / `work_budget_exceeded`）。
+- ~~在 XML/PDF/表格循环中合作式检查~~：已落地。
 - 为 CLI/服务示例提供独立 worker 隔离方案。
 - 为浏览器示例提供 Web Worker 取消方案。
 
