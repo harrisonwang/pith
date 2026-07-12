@@ -2631,6 +2631,258 @@ pub(crate) fn page_uri_links(doc: &Document, page_id: ObjectId) -> Vec<(String, 
     links
 }
 
+/// A document outline (bookmark) entry resolved to its 1-based page number.
+/// `level` is 1-based nesting depth.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct OutlineHeading {
+    pub level: usize,
+    pub title: String,
+    pub page: usize,
+}
+
+/// Bounds for the outline walk. All of them exist because `/Outlines` comes
+/// from the input file: a hostile tree can be cyclic (via `/Next`/`/First`),
+/// enormous, or arbitrarily deep, and lopdf's own `get_toc` walks it without
+/// protection (and collapses duplicate titles), so spoor walks it itself.
+const MAX_OUTLINE_ENTRIES: usize = 512;
+const MAX_OUTLINE_DEPTH: usize = 8;
+const MAX_OUTLINE_TITLE_CHARS: usize = 256;
+const MAX_NAME_TREE_NODES: usize = 256;
+const MAX_DEST_HOPS: usize = 8;
+
+/// Decode a PDF text string: UTF-16 (either BOM) or, failing UTF-8, a Latin-1
+/// approximation of PDFDocEncoding — ASCII titles come through identically.
+fn decode_pdf_text_string(bytes: &[u8]) -> String {
+    let utf16 = |big_endian: bool| {
+        let units: Vec<u16> = bytes[2..]
+            .chunks_exact(2)
+            .map(|pair| {
+                if big_endian {
+                    u16::from_be_bytes([pair[0], pair[1]])
+                } else {
+                    u16::from_le_bytes([pair[0], pair[1]])
+                }
+            })
+            .collect();
+        String::from_utf16_lossy(&units)
+    };
+    match bytes {
+        [0xFE, 0xFF, ..] => utf16(true),
+        [0xFF, 0xFE, ..] => utf16(false),
+        _ => match std::str::from_utf8(bytes) {
+            Ok(text) => text.to_string(),
+            Err(_) => bytes.iter().map(|&byte| byte as char).collect(),
+        },
+    }
+}
+
+/// Follow a single indirect reference; anything unresolvable stays as-is.
+fn deref_object<'a>(doc: &'a Document, object: &'a Object) -> &'a Object {
+    match object {
+        Object::Reference(id) => doc.get_object(*id).unwrap_or(object),
+        _ => object,
+    }
+}
+
+fn string_bytes<'a>(doc: &'a Document, object: &'a Object) -> Option<&'a [u8]> {
+    match object {
+        Object::String(bytes, _) => Some(bytes),
+        Object::Reference(id) => match doc.get_object(*id).ok()? {
+            Object::String(bytes, _) => Some(bytes),
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
+/// Collect named destinations from both the legacy `/Dests` dictionary and the
+/// `/Names` name tree, bounded and cycle-safe.
+fn collect_named_dests(doc: &Document) -> std::collections::HashMap<Vec<u8>, Object> {
+    let mut map = std::collections::HashMap::new();
+    let Ok(catalog) = doc.catalog() else {
+        return map;
+    };
+    if let Some(dests) = catalog.get(b"Dests").ok().and_then(|o| deref_dict(doc, o)) {
+        for (key, value) in dests.iter() {
+            map.insert(key.clone(), value.clone());
+            if map.len() >= MAX_OUTLINE_ENTRIES * 4 {
+                return map;
+            }
+        }
+    }
+    let tree_root = catalog
+        .get(b"Names")
+        .ok()
+        .and_then(|o| deref_dict(doc, o))
+        .and_then(|names| names.get(b"Dests").ok());
+    if let Some(root) = tree_root {
+        let mut budget = MAX_NAME_TREE_NODES;
+        let mut visited = std::collections::HashSet::new();
+        collect_name_tree(doc, root, &mut map, &mut budget, &mut visited);
+    }
+    map
+}
+
+fn collect_name_tree(
+    doc: &Document,
+    node: &Object,
+    map: &mut std::collections::HashMap<Vec<u8>, Object>,
+    budget: &mut usize,
+    visited: &mut std::collections::HashSet<ObjectId>,
+) {
+    if *budget == 0 {
+        return;
+    }
+    *budget -= 1;
+    if let Object::Reference(id) = node {
+        if !visited.insert(*id) {
+            return;
+        }
+    }
+    let Some(dict) = deref_dict(doc, node) else {
+        return;
+    };
+    if let Some(Object::Array(pairs)) = dict.get(b"Names").ok().map(|o| deref_object(doc, o)) {
+        for pair in pairs.chunks_exact(2) {
+            let key = match &pair[0] {
+                Object::String(bytes, _) => bytes.clone(),
+                Object::Name(bytes) => bytes.clone(),
+                _ => continue,
+            };
+            map.insert(key, pair[1].clone());
+            if map.len() >= MAX_OUTLINE_ENTRIES * 4 {
+                return;
+            }
+        }
+    }
+    if let Some(Object::Array(kids)) = dict.get(b"Kids").ok().map(|o| deref_object(doc, o)) {
+        for kid in kids.iter().take(64) {
+            collect_name_tree(doc, kid, map, budget, visited);
+        }
+    }
+}
+
+/// Resolve a destination object (array, name, string, dict, or reference) to
+/// its 1-based page number.
+fn dest_page(
+    doc: &Document,
+    object: &Object,
+    named: &std::collections::HashMap<Vec<u8>, Object>,
+    page_numbers: &std::collections::HashMap<ObjectId, usize>,
+    hops: usize,
+) -> Option<usize> {
+    if hops == 0 {
+        return None;
+    }
+    match object {
+        Object::Reference(id) => {
+            dest_page(doc, doc.get_object(*id).ok()?, named, page_numbers, hops - 1)
+        }
+        Object::Array(items) => items
+            .first()?
+            .as_reference()
+            .ok()
+            .and_then(|id| page_numbers.get(&id).copied()),
+        Object::Name(name) => dest_page(doc, named.get(name)?, named, page_numbers, hops - 1),
+        Object::String(name, _) => dest_page(doc, named.get(name)?, named, page_numbers, hops - 1),
+        Object::Dictionary(dict) => {
+            dest_page(doc, dict.get(b"D").ok()?, named, page_numbers, hops - 1)
+        }
+        _ => None,
+    }
+}
+
+/// The document outline (bookmarks) flattened to (level, title, page), in
+/// outline order. Empty when there is no outline or nothing resolves — the
+/// caller then simply promotes no headings.
+pub(crate) fn outline_headings(doc: &Document) -> Vec<OutlineHeading> {
+    let mut result = Vec::new();
+    let Ok(catalog) = doc.catalog() else {
+        return result;
+    };
+    let Some(first) = catalog
+        .get(b"Outlines")
+        .ok()
+        .and_then(|o| deref_dict(doc, o))
+        .and_then(|outlines| outlines.get(b"First").ok())
+        .and_then(|o| o.as_reference().ok())
+    else {
+        return result;
+    };
+    let named = collect_named_dests(doc);
+    let page_numbers: std::collections::HashMap<ObjectId, usize> = doc
+        .get_pages()
+        .into_iter()
+        .map(|(number, id)| (id, number as usize))
+        .collect();
+    let mut visited = std::collections::HashSet::new();
+    walk_outline_level(
+        doc,
+        first,
+        1,
+        &named,
+        &page_numbers,
+        &mut visited,
+        &mut result,
+    );
+    result
+}
+
+fn walk_outline_level(
+    doc: &Document,
+    first: ObjectId,
+    level: usize,
+    named: &std::collections::HashMap<Vec<u8>, Object>,
+    page_numbers: &std::collections::HashMap<ObjectId, usize>,
+    visited: &mut std::collections::HashSet<ObjectId>,
+    out: &mut Vec<OutlineHeading>,
+) {
+    if level > MAX_OUTLINE_DEPTH {
+        return;
+    }
+    let mut node = Some(first);
+    while let Some(id) = node {
+        if out.len() >= MAX_OUTLINE_ENTRIES || !visited.insert(id) {
+            return;
+        }
+        let Ok(dict) = doc.get_dictionary(id) else {
+            return;
+        };
+
+        let title = dict
+            .get(b"Title")
+            .ok()
+            .and_then(|obj| string_bytes(doc, obj))
+            .map(decode_pdf_text_string)
+            .map(|text| text.trim().chars().take(MAX_OUTLINE_TITLE_CHARS).collect::<String>())
+            .unwrap_or_default();
+        let dest = dict.get(b"Dest").ok().or_else(|| {
+            dict.get(b"A")
+                .ok()
+                .and_then(|a| deref_dict(doc, a))
+                .filter(|action| {
+                    action
+                        .get(b"S")
+                        .and_then(Object::as_name)
+                        .is_ok_and(|name| name == b"GoTo")
+                })
+                .and_then(|action| action.get(b"D").ok())
+        });
+        if !title.is_empty() {
+            if let Some(page) =
+                dest.and_then(|d| dest_page(doc, d, named, page_numbers, MAX_DEST_HOPS))
+            {
+                out.push(OutlineHeading { level, title, page });
+            }
+        }
+
+        if let Ok(first_child) = dict.get(b"First").and_then(Object::as_reference) {
+            walk_outline_level(doc, first_child, level + 1, named, page_numbers, visited, out);
+        }
+        node = dict.get(b"Next").and_then(Object::as_reference).ok();
+    }
+}
+
 /// Span extraction over an already-loaded document — the shared-`Document` entry
 /// point for the single-parse path.
 pub(crate) fn extract_spans_by_page_range(doc: &Document, page_range: Option<(usize, usize)>) -> Result<Vec<(usize, EnginePage)>, OutputError> {

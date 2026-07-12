@@ -81,12 +81,26 @@ pub fn extract(
         })
         .collect();
 
-    // Weave URI link annotations into each page's text: anchored links become
-    // [text](url) in place, and targets whose anchor cannot be recovered are
-    // appended as autolinks, so the agent never loses a destination.
+    // Promote outline-named lines to Markdown headings first (the PDF's own
+    // structure declaration; nothing is inferred), then weave URI link
+    // annotations into the text: anchored links become [text](url) in place,
+    // and targets whose anchor cannot be recovered are appended as autolinks,
+    // so the agent never loses a destination.
+    let mut headings_by_page: std::collections::HashMap<usize, Vec<(usize, String)>> =
+        std::collections::HashMap::new();
+    for entry in super::pdf_engine::outline_headings(&doc) {
+        headings_by_page
+            .entry(entry.page)
+            .or_default()
+            .push((entry.level, entry.title));
+    }
     let pages: Vec<(usize, String)> = pages
         .into_iter()
         .map(|(number, text)| {
+            let text = match headings_by_page.get(&number) {
+                Some(headings) => super::pdf_outline::apply_headings(&text, headings),
+                None => text,
+            };
             let links = span_pages
                 .get(&number)
                 .map(super::pdf_links::page_links)

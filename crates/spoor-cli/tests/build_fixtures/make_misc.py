@@ -163,8 +163,10 @@ def build_outline_pdf():
     c.bookmarkPage("methods")
     c.addOutlineEntry("Methods", "methods", level=0)
     # An outline entry whose title appears nowhere on the page: spoor must
-    # not fabricate a heading for it.
-    c.addOutlineEntry("Missing Section", "methods", level=1)
+    # not fabricate a heading for it. Distinct key — reportlab dedupes
+    # outline entries by key, so sharing "methods" would drop that entry.
+    c.bookmarkPage("missing")
+    c.addOutlineEntry("Missing Section", "missing", level=1)
     c.showPage()
     c.save()
 

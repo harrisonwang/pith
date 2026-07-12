@@ -23,6 +23,8 @@ mod pdf_layout;
 #[cfg(feature = "pdf")]
 mod pdf_links;
 #[cfg(feature = "pdf")]
+mod pdf_outline;
+#[cfg(feature = "pdf")]
 mod pdf_tables;
 #[cfg(feature = "pdf")]
 #[rustfmt::skip]

@@ -130,6 +130,27 @@ fn uri_link_annotations_are_woven_into_markdown() {
 }
 
 #[test]
+fn outline_titles_promote_matching_lines_to_headings() {
+    // 09_outline.pdf carries a two-level outline: Introduction > Background on
+    // page 1, Methods on page 2, plus a "Missing Section" entry whose title
+    // appears nowhere. Outline depth maps below the `## Page N` blocks
+    // (level 1 → ###), and an unmatched title must not fabricate a heading.
+    let out = extract_fixture("pdf/09_outline.pdf", Format::Pdf);
+    assert!(out.contains("\n### Introduction\n"), "{out}");
+    assert!(out.contains("\n#### Background\n"), "{out}");
+    assert!(out.contains("### Methods"), "{out}");
+    assert!(
+        !out.contains("Missing Section"),
+        "an outline title absent from its page must not be fabricated:\n{out}"
+    );
+    // Prose lines stay prose.
+    assert!(
+        out.contains("Opening prose that follows the first heading."),
+        "{out}"
+    );
+}
+
+#[test]
 fn two_column_pdf_is_read_left_column_then_right_with_warning() {
     // 07_two_column.pdf draws the two columns interleaved row-by-row in the
     // content stream, so flat extraction interleaves them. Geometric
