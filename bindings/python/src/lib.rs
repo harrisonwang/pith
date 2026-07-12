@@ -7,7 +7,7 @@ use std::str::FromStr;
 pyo3::create_exception!(_native, SpoorError, PyException);
 
 #[allow(clippy::too_many_arguments)]
-#[pyfunction(signature = (data, source_name=None, content_type=None, format=None, max_parse_bytes=None, sheet=None, rows=None, columns=None, limit=None, offset=None, pages=None, max_work_units=None, provenance=None))]
+#[pyfunction(signature = (data, source_name=None, content_type=None, format=None, max_parse_bytes=None, sheet=None, rows=None, columns=None, limit=None, offset=None, pages=None, max_work_units=None, provenance=None, keep_repeated_regions=None))]
 fn parse_bytes(
     py: Python<'_>,
     data: &[u8],
@@ -23,6 +23,7 @@ fn parse_bytes(
     pages: Option<(usize, usize)>,
     max_work_units: Option<usize>,
     provenance: Option<&str>,
+    keep_repeated_regions: Option<bool>,
 ) -> PyResult<Py<PyAny>> {
     let mut request = request(
         data,
@@ -36,6 +37,7 @@ fn parse_bytes(
         TableFilter::build(sheet, rows, columns.unwrap_or_default(), limit, offset)
             .map_err(to_py_error)?;
     request.document_filter = DocumentFilter::build(pages).map_err(to_py_error)?;
+    request.document_filter.keep_repeated_regions = keep_repeated_regions.unwrap_or(false);
     if let Some(level) = provenance {
         request.provenance = ProvenanceLevel::from_str(level).map_err(to_py_error)?;
     }

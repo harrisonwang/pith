@@ -90,6 +90,7 @@ fn page_filter_limits_pdf_output_to_requested_pages() {
     request.format_hint = Some(Format::Pdf);
     request.document_filter = DocumentFilter {
         page_range: Some((2, 2)),
+        ..DocumentFilter::default()
     };
 
     let markdown = parse_document(&request)
@@ -147,6 +148,78 @@ fn outline_titles_promote_matching_lines_to_headings() {
     assert!(
         out.contains("Opening prose that follows the first heading."),
         "{out}"
+    );
+}
+
+#[test]
+fn repeated_headers_and_footers_deduplicate_with_warning() {
+    // 10_header_footer.pdf repeats "ACME Corp Annual Report 2026" and
+    // "Page N of 4" on all four pages. Dedup keeps each region's first
+    // occurrence, removes the repeats, and names what moved in a stable
+    // warning; body prose is untouched.
+    let result = parse_fixture("pdf/10_header_footer.pdf", Format::Pdf);
+    let ParseContent::Document(document) = &result.content else {
+        panic!("expected document result");
+    };
+    let markdown = &document.markdown;
+
+    assert_eq!(
+        markdown.matches("ACME Corp Annual Report 2026").count(),
+        1,
+        "header must keep exactly its first occurrence:\n{markdown}"
+    );
+    assert!(markdown.contains("Page 1 of 4"), "{markdown}");
+    assert!(!markdown.contains("Page 3 of 4"), "{markdown}");
+    for body in [
+        "Revenue grew steadily",
+        "Costs were kept flat",
+        "outlook section",
+        "Appendix tables",
+    ] {
+        assert!(markdown.contains(body), "body prose must stay: {body}");
+    }
+
+    let furniture: Vec<_> = result
+        .warnings
+        .iter()
+        .filter(|w| w.code == WarningCode::PdfRepeatedRegionDeduplicated)
+        .collect();
+    assert_eq!(furniture.len(), 2, "{:?}", result.warnings);
+    assert!(furniture.iter().any(|w| w.message.contains("ACME Corp")));
+}
+
+#[test]
+fn keep_repeated_regions_retains_verbatim_page_text() {
+    let path = std::path::Path::new("tests/fixtures/pdf/10_header_footer.pdf");
+    let bytes = std::fs::read(path).expect("read fixture");
+    let mut request = ParseRequest::new(&bytes);
+    request.source_name = path.to_str();
+    request.format_hint = Some(Format::Pdf);
+    request.document_filter = DocumentFilter {
+        keep_repeated_regions: true,
+        ..DocumentFilter::default()
+    };
+
+    let result = parse_document_result(&request).expect("parse with keep option");
+    let ParseContent::Document(document) = &result.content else {
+        panic!("expected document result");
+    };
+
+    assert_eq!(
+        document
+            .markdown
+            .matches("ACME Corp Annual Report 2026")
+            .count(),
+        4,
+        "keep option must retain every occurrence:\n{}",
+        document.markdown
+    );
+    assert!(
+        !result
+            .warnings
+            .iter()
+            .any(|w| w.code == WarningCode::PdfRepeatedRegionDeduplicated),
+        "no dedup warning when nothing was removed"
     );
 }
 

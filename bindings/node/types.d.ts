@@ -26,6 +26,12 @@ export interface ParseOptions {
    * UTF-8; slice with `Buffer.from(markdown).subarray(start, end)`.
    */
   provenance?: string;
+  /**
+   * PDF only: keep cross-page repeated headers/footers instead of
+   * deduplicating them (default false — repeats are removed and a
+   * `pdf_repeated_region_deduplicated` warning names what moved).
+   */
+  keepRepeatedRegions?: boolean;
 }
 
 export interface DocumentResult {

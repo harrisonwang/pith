@@ -28,9 +28,10 @@ pub fn detect_format(
 /// `[first, last]` pair (mutually exclusive with `limit`/`offset`), `columns`
 /// to keep, and `limit`/`offset` for pagination. For page-oriented formats
 /// (PDF), `pages` is an inclusive 1-based `[first, last]` range. `provenance`
-/// (`"page"`/`"off"`) returns an output→source page mapping. Each is ignored
-/// by formats it does not apply to, and all are optional, so existing
-/// 5-argument calls keep working.
+/// (`"page"`/`"off"`) returns an output→source page mapping.
+/// `keep_repeated_regions` keeps PDF cross-page repeated headers/footers
+/// instead of deduplicating them. Each is ignored by formats it does not
+/// apply to, and all are optional, so existing 5-argument calls keep working.
 #[wasm_bindgen]
 #[allow(clippy::too_many_arguments)]
 pub fn parse_bytes(
@@ -47,6 +48,7 @@ pub fn parse_bytes(
     pages: Option<Vec<u32>>,
     max_work_units: Option<usize>,
     provenance: Option<String>,
+    keep_repeated_regions: Option<bool>,
 ) -> Result<JsValue, JsValue> {
     let mut request = request(
         bytes,
@@ -66,6 +68,7 @@ pub fn parse_bytes(
     .map_err(error_value)?;
     request.document_filter =
         DocumentFilter::build_from_page_slice(pages.as_deref()).map_err(error_value)?;
+    request.document_filter.keep_repeated_regions = keep_repeated_regions.unwrap_or(false);
     if let Some(level) = provenance.as_deref() {
         request.provenance = ProvenanceLevel::from_str(level).map_err(error_value)?;
     }

@@ -145,6 +145,28 @@ assert.ok(new TextDecoder().decode(provMd.subarray(start, end)).startsWith('## P
 // Off by default: no provenance field on the result.
 assert.equal(parse_bytes(multipagePdf, 'doc.pdf').provenance, undefined);
 
+// Repeated header/footer dedup reaches the WASM host too, with the keep
+// switch as the 14th positional arg.
+const furniturePdf = await readFile(new URL(
+  '../../crates/spoor-cli/tests/fixtures/pdf/10_header_footer.pdf',
+  import.meta.url,
+));
+const dedupedFurniture = parse_bytes(furniturePdf, 'report.pdf');
+assert.equal(
+  dedupedFurniture.content.value.markdown.split('ACME Corp Annual Report 2026').length - 1,
+  1,
+);
+assert.ok(dedupedFurniture.warnings.some(
+  (warning) => warning.code === 'pdf_repeated_region_deduplicated',
+));
+const verbatimFurniture = parse_bytes(
+  furniturePdf, 'report.pdf', undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, true,
+);
+assert.equal(
+  verbatimFurniture.content.value.markdown.split('ACME Corp Annual Report 2026').length - 1,
+  4,
+);
+
 // Quote grounding: four deterministic tiers, spans in UTF-16 code units so
 // String.prototype.slice recovers the hit directly.
 const locateMd = [

@@ -81,6 +81,26 @@ pub fn extract(
         })
         .collect();
 
+    // Classify and deduplicate cross-page repeated headers/footers before any
+    // per-page rewriting: the first occurrence stays, later repeats are
+    // dropped, and each region draws a stable warning naming what moved.
+    // `keep_repeated_regions` skips the pass for consumers that need verbatim
+    // page text.
+    let mut pages = pages;
+    let mut furniture_warnings: Vec<SpoorWarning> = Vec::new();
+    if !document_filter.keep_repeated_regions {
+        for region in super::pdf_furniture::dedupe_repeated_regions(&mut pages) {
+            let pages_list = format_page_list(&region.removed_from_pages);
+            furniture_warnings.push(SpoorWarning::new(
+                WarningCode::PdfRepeatedRegionDeduplicated,
+                format!(
+                    "跨页重复的页眉/页脚「{}」已去重：保留首次出现，移除第 {pages_list} 页的重复；需要逐字原文时可开启 keep_repeated_regions。",
+                    region.sample
+                ),
+            ));
+        }
+    }
+
     // Promote outline-named lines to Markdown headings first (the PDF's own
     // structure declaration; nothing is inferred), then weave URI link
     // annotations into the text: anchored links become [text](url) in place,
@@ -150,6 +170,7 @@ pub fn extract(
     limits::ensure_parse_size(markdown.len(), max_parse_bytes, "PDF Markdown rendering")?;
 
     let mut warnings = layout_warnings(&layout);
+    warnings.extend(furniture_warnings);
     for number in reordered_pages {
         warnings.push(SpoorWarning::at_page(
             WarningCode::PdfMultiColumnReadingOrder,
@@ -311,6 +332,22 @@ fn layout_warnings(layout: &PdfLayoutDocument) -> Vec<SpoorWarning> {
         }
     }
     warnings
+}
+
+/// Human-readable page list for a warning message: "2、3、4"; long lists are
+/// elided after eight entries.
+fn format_page_list(pages: &[usize]) -> String {
+    const SHOWN: usize = 8;
+    let mut listed = pages
+        .iter()
+        .take(SHOWN)
+        .map(usize::to_string)
+        .collect::<Vec<_>>()
+        .join("、");
+    if pages.len() > SHOWN {
+        listed.push_str(&format!("…（共 {} 页）", pages.len()));
+    }
+    listed
 }
 
 fn suspicious_text_layer(page: &str) -> bool {

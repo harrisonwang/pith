@@ -19,6 +19,8 @@ mod markdown;
 #[cfg(feature = "pdf")]
 mod pdf;
 #[cfg(feature = "pdf")]
+mod pdf_furniture;
+#[cfg(feature = "pdf")]
 mod pdf_layout;
 #[cfg(feature = "pdf")]
 mod pdf_links;

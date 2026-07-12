@@ -216,3 +216,23 @@ def test_locate_quote_unit_conversion_matches_numerically() -> None:
 def test_locate_quote_rejects_fabrications() -> None:
     assert locate_quote(LOCATE_MD, "海外收入 9999 亿") is None
     assert locate_quote(LOCATE_MD, "") is None
+
+
+def test_repeated_page_furniture_deduplicates_with_warning() -> None:
+    # 10_header_footer.pdf repeats a header and "Page N of 4" on all 4 pages;
+    # dedup keeps first occurrences and names what moved in a stable warning.
+    result = parse_path(FIXTURES / "pdf/10_header_footer.pdf")
+    markdown = result.content.value.markdown
+    assert markdown.count("ACME Corp Annual Report 2026") == 1
+    codes = [warning["code"] for warning in result.warnings]
+    assert "pdf_repeated_region_deduplicated" in codes
+
+
+def test_keep_repeated_regions_retains_verbatim_text() -> None:
+    result = parse_path(
+        FIXTURES / "pdf/10_header_footer.pdf", keep_repeated_regions=True
+    )
+    markdown = result.content.value.markdown
+    assert markdown.count("ACME Corp Annual Report 2026") == 4
+    codes = [warning["code"] for warning in result.warnings]
+    assert "pdf_repeated_region_deduplicated" not in codes

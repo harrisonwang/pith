@@ -157,6 +157,11 @@ pub struct DocumentFilter {
     /// Inclusive 1-based page range for page-oriented document formats.
     /// Currently only PDF uses this to avoid extracting unrequested pages.
     pub page_range: Option<(usize, usize)>,
+    /// Keep cross-page repeated headers/footers instead of deduplicating
+    /// them (PDF). Off by default: repeated page furniture pollutes retrieval
+    /// and chunking; consumers that need the verbatim page text (for example
+    /// to ground quotes against unmodified output) opt out here.
+    pub keep_repeated_regions: bool,
 }
 
 impl DocumentFilter {
@@ -167,6 +172,7 @@ impl DocumentFilter {
     pub fn build(pages: Option<(usize, usize)>) -> SpoorResult<Self> {
         Ok(Self {
             page_range: validated_inclusive_range(pages)?,
+            keep_repeated_regions: false,
         })
     }
 

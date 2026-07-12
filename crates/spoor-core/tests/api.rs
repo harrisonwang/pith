@@ -84,6 +84,7 @@ fn pdf_stats_report_total_page_count_even_when_sliced() {
     request.source_name = Some("doc.pdf");
     request.document_filter = DocumentFilter {
         page_range: Some((1, 1)),
+        ..DocumentFilter::default()
     };
 
     let result = parse(&request).unwrap();
@@ -250,6 +251,7 @@ fn page_provenance_follows_the_page_slice() {
     request.provenance = ProvenanceLevel::Page;
     request.document_filter = DocumentFilter {
         page_range: Some((2, 2)),
+        ..DocumentFilter::default()
     };
 
     let result = parse(&request).unwrap();

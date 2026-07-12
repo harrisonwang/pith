@@ -18,6 +18,7 @@ def parse_bytes(
     pages: tuple[int, int] | None,
     max_work_units: int | None,
     provenance: str | None,
+    keep_repeated_regions: bool | None,
 ) -> dict[str, Any]: ...
 def extract_media(
     data: bytes,

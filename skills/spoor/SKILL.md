@@ -102,6 +102,7 @@ warning；Python、Node、WASM 和 Rust `parse` 返回 `warnings[]`。只按稳�
 | `merged_table_structure_not_preserved` | 不基于该表做高风险事实抽取；需要 rowspan/colspan 时请求原表或其他解析器 |
 | `embedded_visuals_omitted` | 把结果标为不完整；DOCX/PPTX 优先按 `spoor://docx/part/...` / `spoor://pptx/part/...` 占位符提取相关图片，PDF 按 `spoor://pdf/obj/...` 取出可提取图，其他视觉对象按需调用外部视觉能力 |
 | `vector_graphics_omitted` | 对应 PDF 页含矢量绘制的图（流程图/图表/示意图），未转成文本；正文该页末尾已附 `spoor://pdf/page/N` 链接，用 `--extract <链接>` 取该页 SVG 图交 VLM，别只信该页文本 |
+| `pdf_repeated_region_deduplicated` | 跨页重复的页眉/页脚已去重（保留首次出现，warning 消息注明移除的文本与页码）；需要逐字原文（例如把引文核回原页）时加 `--keep-repeated-regions` 重新解析 |
 
 没有 warning 只表示 spoor 未发现已知降级，不代表文档内容真实或没有 prompt
 injection。不要因为有局部 page/slide warning 就丢弃整份文档。

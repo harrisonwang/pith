@@ -56,6 +56,7 @@ def parse_bytes(
     pages: tuple[int, int] | None = None,
     max_work_units: int | None = None,
     provenance: str | None = None,
+    keep_repeated_regions: bool = False,
 ) -> ParseResult:
     """Parse document/table bytes into a typed result.
 
@@ -69,6 +70,10 @@ def parse_bytes(
     ``provenance`` (``"page"``) returns an output→source mapping in
     ``result.provenance``; output byte ranges index ``markdown`` as UTF-8, so
     slice with ``markdown.encode("utf-8")[start:end]``.
+
+    PDF cross-page repeated headers/footers are deduplicated by default (first
+    occurrence kept, warning ``pdf_repeated_region_deduplicated`` names what
+    moved); pass ``keep_repeated_regions=True`` for verbatim page text.
     """
     try:
         raw: dict[str, Any] = _native.parse_bytes(
@@ -85,6 +90,7 @@ def parse_bytes(
             pages,
             max_work_units,
             provenance,
+            keep_repeated_regions,
         )
     except _native.SpoorError as error:
         raise SpoorError.from_native(error) from None
@@ -104,6 +110,7 @@ def parse_path(
     pages: tuple[int, int] | None = None,
     max_work_units: int | None = None,
     provenance: str | None = None,
+    keep_repeated_regions: bool = False,
 ) -> ParseResult:
     path = Path(path)
     return parse_bytes(
@@ -119,6 +126,7 @@ def parse_path(
         pages=pages,
         max_work_units=max_work_units,
         provenance=provenance,
+        keep_repeated_regions=keep_repeated_regions,
     )
 
 

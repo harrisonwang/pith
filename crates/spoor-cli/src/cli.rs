@@ -140,6 +140,10 @@ pub(crate) struct Cli {
     #[arg(long, value_name = "first:last")]
     pub(crate) pages: Option<String>,
 
+    /// 保留 PDF 跨页重复的页眉/页脚（默认去重，仅保留首次出现）。
+    #[arg(long)]
+    pub(crate) keep_repeated_regions: bool,
+
     /// 指定 XLSX 工作表名。CSV 忽略此选项。
     #[arg(long, value_name = "name")]
     pub(crate) sheet: Option<String>,
@@ -384,6 +388,7 @@ mod tests {
             "format",
             "mode",
             "pages",
+            "keep-repeated-regions",
             "max-output-kib",
             "max-parse-mib",
             "max-work-units",

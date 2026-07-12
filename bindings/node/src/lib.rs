@@ -30,6 +30,10 @@ pub struct ParseOptions {
     /// (default) for none. Output byte ranges in `provenance` index the returned
     /// `markdown` as UTF-8 bytes; slice with `Buffer.from(markdown).subarray(...)`.
     pub provenance: Option<String>,
+    /// PDF only: keep cross-page repeated headers/footers instead of
+    /// deduplicating them (default false — repeats are removed and a
+    /// `pdf_repeated_region_deduplicated` warning names what moved).
+    pub keep_repeated_regions: Option<bool>,
 }
 
 #[napi]
@@ -39,6 +43,7 @@ pub fn parse_bytes(data: Buffer, options: Option<ParseOptions>) -> Result<serde_
     request.table_filter = table_filter(&options)?;
     request.document_filter =
         DocumentFilter::build_from_page_slice(options.pages.as_deref()).map_err(to_node_error)?;
+    request.document_filter.keep_repeated_regions = options.keep_repeated_regions.unwrap_or(false);
     if let Some(level) = options.provenance.as_deref() {
         request.provenance = ProvenanceLevel::from_str(level).map_err(to_node_error)?;
     }

@@ -172,3 +172,27 @@ test('locates quotes across the four deterministic tiers', () => {
   assert.equal(locateQuote(md, '海外收入 9999 亿'), null);
   assert.equal(locateQuote(md, ''), null);
 });
+
+test('repeated page furniture deduplicates by default and keepRepeatedRegions retains it', (t) => {
+  const pdf = readFileSync(join(
+    __dirname,
+    '../../../crates/spoor-cli/tests/fixtures/pdf/10_header_footer.pdf',
+  ));
+
+  const deduped = parseBytes(pdf, { sourceName: 'report.pdf' });
+  const dedupedMd = deduped.content.value.markdown;
+  assert.equal(dedupedMd.split('ACME Corp Annual Report 2026').length - 1, 1);
+  assert.ok(deduped.warnings.some(
+    (warning) => warning.code === 'pdf_repeated_region_deduplicated',
+  ));
+
+  const verbatim = parseBytes(pdf, {
+    sourceName: 'report.pdf',
+    keepRepeatedRegions: true,
+  });
+  const verbatimMd = verbatim.content.value.markdown;
+  assert.equal(verbatimMd.split('ACME Corp Annual Report 2026').length - 1, 4);
+  assert.ok(!verbatim.warnings.some(
+    (warning) => warning.code === 'pdf_repeated_region_deduplicated',
+  ));
+});

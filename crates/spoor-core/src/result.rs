@@ -66,16 +66,18 @@ pub enum WarningCode {
     MergedTableStructureNotPreserved,
     EmbeddedVisualsOmitted,
     VectorGraphicsOmitted,
+    PdfRepeatedRegionDeduplicated,
 }
 
 impl WarningCode {
-    pub const ALL: [WarningCode; 6] = [
+    pub const ALL: [WarningCode; 7] = [
         WarningCode::PdfPageNoTextLayer,
         WarningCode::PdfPageSuspiciousTextLayer,
         WarningCode::PdfMultiColumnReadingOrder,
         WarningCode::MergedTableStructureNotPreserved,
         WarningCode::EmbeddedVisualsOmitted,
         WarningCode::VectorGraphicsOmitted,
+        WarningCode::PdfRepeatedRegionDeduplicated,
     ];
 
     pub const fn as_str(self) -> &'static str {
@@ -86,6 +88,7 @@ impl WarningCode {
             Self::MergedTableStructureNotPreserved => "merged_table_structure_not_preserved",
             Self::EmbeddedVisualsOmitted => "embedded_visuals_omitted",
             Self::VectorGraphicsOmitted => "vector_graphics_omitted",
+            Self::PdfRepeatedRegionDeduplicated => "pdf_repeated_region_deduplicated",
         }
     }
 }

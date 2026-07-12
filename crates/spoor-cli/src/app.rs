@@ -520,7 +520,9 @@ fn build_document_filter(cli: &Cli) -> Result<DocumentFilter> {
         Some(s) => Some(parse_range_flag("--pages", s)?),
         None => None,
     };
-    DocumentFilter::build(pages).map_err(|error| anyhow!("{}", error.reason))
+    let mut filter = DocumentFilter::build(pages).map_err(|error| anyhow!("{}", error.reason))?;
+    filter.keep_repeated_regions = cli.keep_repeated_regions;
+    Ok(filter)
 }
 
 /// Parse a `<first>:<last>` range string into a 1-based pair. Bound validation

@@ -171,6 +171,7 @@ Rust 的 `span` 是 UTF-8 字节区间，Python/Node/WASM 返回各自语言的�
 | `merged_table_structure_not_preserved` | DOCX/PPTX 合并单元格未被 GFM 表格完整保留 |
 | `embedded_visuals_omitted` | DOCX/PPTX 中存在尚未被理解或未进入文本输出的视觉对象；DOCX/PPTX 内嵌栅格图片可能已有 `spoor://docx/part/` / `spoor://pptx/part/` 占位符，PDF 同理用 `spoor://pdf/obj/` |
 | `vector_graphics_omitted` | PDF 某页含矢量绘制的图（流程图/图表/示意图），未转成文本输出；正文该页末尾附 `spoor://pdf/page/N` 链接，可 `--extract` 取该页 SVG 图交视觉模型 |
+| `pdf_repeated_region_deduplicated` | PDF 跨页重复的页眉/页脚已去重，仅保留首次出现；`--keep-repeated-regions`（各绑定为 `keep_repeated_regions` 选项）可保留逐字原文 |
 
 warning 可带 `location: {kind: "page" | "slide", number}`。CLI 会同时在 stderr 和
 Markdown stdout 尾部显示这些 warning，避免只读 stdout 的 Agent 静默忽略。
