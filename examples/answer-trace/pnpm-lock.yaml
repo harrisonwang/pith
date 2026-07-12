@@ -43,8 +43,8 @@ importers:
         specifier: ^1.6.12
         version: 1.7.6
       '@harrisonwang/spoor-wasm':
-        specifier: ^0.8.17
-        version: 0.8.18
+        specifier: ^0.11.0
+        version: 0.11.0
       marked:
         specifier: ^14.1.0
         version: 14.1.4
@@ -488,6 +488,9 @@ packages:
 
   '@floating-ui/utils@0.2.11':
     resolution: {integrity: sha512-RiB/yIh78pcIxl6lLMG0CgBXAZ2Y0eVHqMPYugu+9U0AeT6YBeiJpf7lbdJNIugFP5SIjwNRgo4DhR1Qxi26Gg==}
+
+  '@harrisonwang/spoor-wasm@0.11.0':
+    resolution: {integrity: sha512-EpdaSc7RA72QFvOEwbcb/CpggHSPQh2OQ021E1/1kA9Ss3JgrqGG4w+oJ+vt3T7r/ueDMMykMVdLS5VtP/P/Jw==}
 
   '@harrisonwang/spoor-wasm@0.8.18':
     resolution: {integrity: sha512-58rtJJ/FTiR19csauoL4TpLfIdts2b00jJ/ZHZ5s2U1aj7zDEfo/tn4T1Pdpfp7648tSwNJQaDbl0i7XQs0W/g==}
@@ -1767,6 +1770,8 @@ snapshots:
       '@floating-ui/utils': 0.2.11
 
   '@floating-ui/utils@0.2.11': {}
+
+  '@harrisonwang/spoor-wasm@0.11.0': {}
 
   '@harrisonwang/spoor-wasm@0.8.18': {}
 

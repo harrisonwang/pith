@@ -67,7 +67,27 @@
             "end": { "type": "integer" }
           }
         },
+        "anchor": { "$ref": "#/$defs/anchor" },
         "note": { "type": "string" }
+      }
+    },
+    "anchor": {
+      "type": "object",
+      "required": ["page"],
+      "additionalProperties": false,
+      "properties": {
+        "page": { "type": "integer" },
+        "bbox": {
+          "type": "object",
+          "required": ["x0", "y0", "x1", "y1"],
+          "additionalProperties": false,
+          "properties": {
+            "x0": { "type": "number" },
+            "y0": { "type": "number" },
+            "x1": { "type": "number" },
+            "y1": { "type": "number" }
+          }
+        }
       }
     },
     "cellEvidence": {

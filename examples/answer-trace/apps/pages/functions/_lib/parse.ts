@@ -1,14 +1,24 @@
 // 上传解析 + 图片类型判定（spoor-wasm）。
 
-import { parseBytes, type TableEntry } from "./spoor";
+import { parseBytes, type ProvenanceSpan, type TableEntry } from "./spoor";
 
 export const MAX_REQUEST_BYTES = 16 * 1024 * 1024;
 
-export function parseToMarkdown(name: string, data: Uint8Array): string {
-  const res = parseBytes(data, name, MAX_REQUEST_BYTES);
-  if (res.content.kind === "document") return res.content.value.markdown;
-  return tablesToMarkdown(res.content.value.tables);
+export interface ParsedDoc {
+  markdown: string;
+  /** 块级来源定位(spoor --provenance block);表格型无。 */
+  provenance?: ProvenanceSpan[];
 }
+
+/** 解析并顺带要块级来源定位:文档命中的证据能锚回源页坐标。 */
+export function parseDoc(name: string, data: Uint8Array): ParsedDoc {
+  const res = parseBytes(data, name, MAX_REQUEST_BYTES, "block");
+  if (res.content.kind === "document") {
+    return { markdown: res.content.value.markdown, provenance: res.provenance?.spans };
+  }
+  return { markdown: tablesToMarkdown(res.content.value.tables) };
+}
+
 
 // 表格类（CSV/XLSX）渲染成 markdown 表格，让定位器一视同仁地在文本里找证据。
 function tablesToMarkdown(tables: TableEntry[]): string {

@@ -3,7 +3,7 @@ import { cfg, type Env } from "../_lib/config";
 import * as corpus from "../_lib/corpus";
 import { json } from "../_lib/http";
 import { rewriteSpoorImages } from "../_lib/mediaUrls";
-import { MAX_REQUEST_BYTES, parseToMarkdown } from "../_lib/parse";
+import { MAX_REQUEST_BYTES, parseDoc } from "../_lib/parse";
 import * as store from "../_lib/store";
 import { count as countTokens } from "../_lib/tokens";
 
@@ -24,9 +24,9 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     const name = f.name || "file";
     const data = new Uint8Array(await f.arrayBuffer());
     try {
-      const md = parseToMarkdown(name, data); // 单个文件失败不连累其它
-      docs.push({ name, markdown: md, bytes: data });
-      results.push({ name, ok: true, chars: md.length });
+      const parsed = parseDoc(name, data); // 单个文件失败不连累其它
+      docs.push({ name, markdown: parsed.markdown, provenance: parsed.provenance, bytes: data });
+      results.push({ name, ok: true, chars: parsed.markdown.length });
     } catch (exc) {
       results.push({ name, ok: false, error: String(exc) });
     }

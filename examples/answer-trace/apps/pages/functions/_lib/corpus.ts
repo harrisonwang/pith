@@ -3,13 +3,16 @@
 // KV 最终一致：upload 响应用本地 docs 直接拼，不 read-after-write。
 
 import type { Env } from "./config";
+import type { ProvenanceSpan } from "./spoor";
 import * as store from "./store";
 
 const TTL = 60 * 60 * 24; // 24h：演示数据自清理
 
-interface StoredDoc {
+export interface StoredDoc {
   name: string;
   markdown: string;
+  /** 块级来源定位(可缺省:旧语料/表格型没有)。 */
+  provenance?: ProvenanceSpan[];
 }
 interface StoredCorpus {
   docs: StoredDoc[];
@@ -18,6 +21,7 @@ interface StoredCorpus {
 export interface DocBytes {
   name: string;
   markdown: string;
+  provenance?: ProvenanceSpan[];
   bytes: Uint8Array;
 }
 
@@ -36,7 +40,9 @@ export function uploadedSourceRef(
 
 export async function setDocs(env: Env, docs: DocBytes[]): Promise<string> {
   const corpusId = crypto.randomUUID();
-  const stored: StoredCorpus = { docs: docs.map((d) => ({ name: d.name, markdown: d.markdown })) };
+  const stored: StoredCorpus = {
+    docs: docs.map((d) => ({ name: d.name, markdown: d.markdown, provenance: d.provenance })),
+  };
   await env.CORPUS.put(`corpus:${corpusId}`, JSON.stringify(stored), { expirationTtl: TTL });
   await Promise.all(
     docs.map((d, i) => env.CORPUS.put(`raw:${corpusId}:${i}`, d.bytes, { expirationTtl: TTL })),
@@ -47,6 +53,13 @@ export async function setDocs(env: Env, docs: DocBytes[]): Promise<string> {
 async function getCorpus(env: Env, corpusId: string): Promise<StoredCorpus | null> {
   const raw = await env.CORPUS.get(`corpus:${corpusId}`);
   return raw ? (JSON.parse(raw) as StoredCorpus) : null;
+}
+
+/** 上传语料的文档列表(含各自的来源定位);无 corpusId 或已过期时为 null。 */
+export async function docs(env: Env, corpusId: string | null): Promise<StoredDoc[] | null> {
+  if (!corpusId) return null;
+  const c = await getCorpus(env, corpusId);
+  return c && c.docs.length ? c.docs : null;
 }
 
 export async function markdown(env: Env, base: string, corpusId: string | null): Promise<string> {

@@ -24,6 +24,74 @@ export interface Located {
   page: number | null;
 }
 
+// —— 来源锚点解析 ——
+// 命中区间在「拼接语料」的 UTF-16 下标里,而 spoor 的 provenance span 是
+// 「单文档 markdown」的 UTF-8 字节区间;两步换算后取重叠最大的 span 的 source。
+
+export interface EvidenceAnchor {
+  page: number;
+  bbox?: { x0: number; y0: number; x1: number; y1: number };
+}
+
+interface AnchorDoc {
+  name: string;
+  markdown: string;
+  provenance?: {
+    output: { start: number; end: number };
+    source: { kind: string; number: number; bbox?: EvidenceAnchor["bbox"] };
+  }[];
+}
+
+/** 与 corpus.joinMarkdown 保持一致的段表:每个文档 markdown 在拼接串里的起点。 */
+function segmentStarts(docs: AnchorDoc[]): { mdStart: number; mdEnd: number }[] {
+  const out: { mdStart: number; mdEnd: number }[] = [];
+  let cursor = 0;
+  for (const d of docs) {
+    const header = `# 文件:${d.name}\n\n`;
+    const mdStart = cursor + header.length;
+    const mdEnd = mdStart + d.markdown.length;
+    out.push({ mdStart, mdEnd });
+    cursor = mdEnd + 2; // "\n\n" 分隔
+  }
+  return out;
+}
+
+/**
+ * 把拼接语料里的命中区间锚回原始文档:命中落在哪个文档,就在该文档的
+ * provenance spans(UTF-8 字节)里找重叠最大的一条,返回其源页与坐标框。
+ * 语料无 provenance(内置演示/表格型/旧数据)时返回 null,证据照常无锚点。
+ */
+export function anchorFor(
+  span: { start: number; end: number },
+  docs: AnchorDoc[],
+): EvidenceAnchor | null {
+  const segments = segmentStarts(docs);
+  const index = segments.findIndex((s) => span.start >= s.mdStart && span.start < s.mdEnd);
+  if (index === -1) return null;
+  const doc = docs[index];
+  if (!doc.provenance?.length) return null;
+
+  const { mdStart, mdEnd } = segments[index];
+  const localStart = span.start - mdStart;
+  const localEnd = Math.min(span.end, mdEnd) - mdStart;
+  if (localEnd <= localStart) return null;
+
+  const encoder = new TextEncoder();
+  const utf8Start = encoder.encode(doc.markdown.slice(0, localStart)).length;
+  const utf8End = utf8Start + encoder.encode(doc.markdown.slice(localStart, localEnd)).length;
+
+  let best: { overlap: number; anchor: EvidenceAnchor } | null = null;
+  for (const p of doc.provenance) {
+    const overlap = Math.min(p.output.end, utf8End) - Math.max(p.output.start, utf8Start);
+    if (overlap > 0 && (!best || overlap > best.overlap)) {
+      best = { overlap, anchor: { page: p.source.number, bbox: p.source.bbox } };
+    }
+  }
+  if (!best) return null;
+  if (best.anchor.bbox === undefined) delete best.anchor.bbox;
+  return best.anchor;
+}
+
 export function pageOf(md: string, pos: number): number | null {
   let page: number | null = null;
   for (const m of md.matchAll(PAGE)) {

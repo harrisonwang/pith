@@ -23,7 +23,7 @@ answer-trace/
 
 > 三种后端形态可任选：`api`(Python 本地) · `edge`(独立 Worker) · `pages`(Pages Functions 合一，含分级核验)。前端 `web` 与它们靠 `/api/*` 契约解耦。
 
-> **路线图(暂未建,需要时再加):** `apps/worker`(异步解析/核验任务)、`packages/ui`(抽成可嵌入 Svelte 组件库)、`infra/`(docker-compose + Dockerfile,部署时)、`openapi.yaml + generated/`(协议漂移了再上 codegen)、**PDF.js**(回原始 PDF 画框,配 `image` 证据)、**matcher 表格 cell 证据**(live 答案现在都走 quote 证据)、**live 答案的原文下钻**(现在仅内置三轮可「定位原文」)。
+> **路线图(暂未建,需要时再加):** `apps/worker`(异步解析/核验任务)、`packages/ui`(抽成可嵌入 Svelte 组件库)、`infra/`(docker-compose + Dockerfile,部署时)、`openapi.yaml + generated/`(协议漂移了再上 codegen)、**PDF.js 画框**(数据已就绪:上传语料经 spoor `provenance:"block"` 解析,quote 证据带 `anchor{page,bbox}`——bbox 为 PDF 原生用户空间坐标,直接 `viewport.convertToViewportRectangle`;原始 PDF 在 KV `raw:${corpusId}:${i}`,补一个 raw 端点 + pdfjs-dist 单页渲染即可)、**matcher 表格 cell 证据**(live 答案现在都走 quote 证据)、**live 答案的原文下钻**(现在仅内置三轮可「定位原文」)。
 
 ## 跑起来
 

@@ -36,6 +36,18 @@ class Span(BaseModel):
     end: int
 
 
+class Bbox(BaseModel):
+    x0: float
+    y0: float
+    x1: float
+    y1: float
+
+
+class EvidenceAnchor(BaseModel):
+    page: int
+    bbox: Bbox | None = None
+
+
 class QuoteEvidence(BaseModel):
     id: str
     kind: Literal["quote"]
@@ -45,6 +57,7 @@ class QuoteEvidence(BaseModel):
     hit: str
     after: str
     span: Span | None = None
+    anchor: EvidenceAnchor | None = None
     note: str | None = None
 
 

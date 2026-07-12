@@ -17,16 +17,43 @@ export interface TableEntry {
   [k: string]: unknown;
 }
 
+/** spoor 的来源定位 span:output 是 markdown 的 UTF-8 字节区间,source 为
+ *  源页码 + born-digital 行的近似坐标框(PDF 原生用户空间,y 向上)。 */
+export interface ProvenanceSpan {
+  output: { start: number; end: number };
+  source: { kind: "page"; number: number; bbox?: { x0: number; y0: number; x1: number; y1: number } };
+}
+
 export interface ParseResult {
   content:
     | { kind: "document"; value: { source: string; format: string; markdown: string } }
     | { kind: "tables"; value: { tables: TableEntry[]; serialized_bytes: number } };
   warnings: { code: string; message: string; location?: { kind: string; number: number } }[];
   stats: { input_bytes: number; output_bytes: number; format: string; page_count?: number };
+  provenance?: { spans: ProvenanceSpan[] };
 }
 
-export function parseBytes(bytes: Uint8Array, sourceName?: string, maxParseBytes?: number): ParseResult {
-  return bindings.parse_bytes(bytes, sourceName, undefined, undefined, maxParseBytes) as ParseResult;
+export function parseBytes(
+  bytes: Uint8Array,
+  sourceName?: string,
+  maxParseBytes?: number,
+  provenance?: "page" | "block",
+): ParseResult {
+  return bindings.parse_bytes(
+    bytes,
+    sourceName,
+    undefined,
+    undefined,
+    maxParseBytes,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    provenance,
+  ) as ParseResult;
 }
 
 export function extractMedia(

@@ -21,7 +21,8 @@ import { SCHEMA_VERSION } from "@answer-trace/protocol";
 
 import { chat } from "./cf";
 import { cfg, type Env } from "./config";
-import { type Located, locate } from "./locate";
+import { anchorFor, type Located, locate } from "./locate";
+import type { StoredDoc } from "./corpus";
 
 const GEN_SYS =
   "你是严谨的中文金融文档助手。**只依据下面的【文档】回答**,不要编造文档中没有的数字或事实," +
@@ -141,6 +142,7 @@ export async function buildTrace(
   question: string,
   md: string,
   source: SourceRef,
+  docs?: StoredDoc[] | null,
 ): Promise<AnswerTrace> {
   const answer = await generate(env, question, md);
   const parsed = await judge(env, question, answer, md);
@@ -215,6 +217,11 @@ export async function buildTrace(
         after: rec.located.after,
         span: rec.located.span,
       };
+      // 上传语料带块级 provenance 时,把命中锚回源页坐标(内置演示无,自然缺省)。
+      if (docs?.length) {
+        const anchor = anchorFor(rec.located.span, docs);
+        if (anchor) q.anchor = anchor;
+      }
       const noteText = rec.silver
         ? rec.note
           ? `${rec.note}（经二次核验的语义匹配，非逐字原文）`
@@ -247,7 +254,7 @@ export async function buildTrace(
     evidence,
     source,
     audit: {
-      parser: "spoor-wasm@0.8",
+      parser: "spoor-wasm@0.11",
       generator: cfg(env).genModel,
       judge: cfg(env).judgeModel,
       judgedAt: new Date().toISOString().replace(/\.\d{3}Z$/, "Z"),

@@ -34,6 +34,13 @@ interface EvidenceBase {
   note?: string
 }
 
+/** 命中在原始文档里的来源锚点:源页码,born-digital PDF 另附近似坐标框
+ *  (PDF 原生用户空间,y 向上,与 /MediaBox 同系;可直接交 PDF.js 画高亮)。 */
+export interface EvidenceAnchor {
+  page: number
+  bbox?: { x0: number; y0: number; x1: number; y1: number }
+}
+
 /** 引文型:后端已从 markdown 切好,前端直接渲染。 */
 export interface QuoteEvidence extends EvidenceBase {
   kind: 'quote'
@@ -42,6 +49,8 @@ export interface QuoteEvidence extends EvidenceBase {
   after: string
   /** 命中在 source markdown 的字符区间;离线渲染原文时定位用,可缺省。 */
   span?: { start: number; end: number }
+  /** 命中在原始 PDF 里的位置(块级 provenance 命中时才有)。 */
+  anchor?: EvidenceAnchor
 }
 
 /** 表格型:数字带「表·行·列」,一眼看出口径。 */
