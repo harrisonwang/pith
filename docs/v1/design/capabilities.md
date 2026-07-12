@@ -63,7 +63,7 @@ ParseContent + stats
 | --- | --- | --- |
 | DOCX | 标题层级、段落、列表、链接、脚注、小表、Unicode、内嵌图片安全路径占位符 | 合并表格结构、图片/图表语义、comments/endnotes |
 | XLSX | sheet/range/header/preamble/rows、分页筛选、截断诊断 | 公式表达式、语义样式、复杂逻辑表识别 |
-| PDF | 文本层、页边界、无文本页/可疑文本层诊断、多栏重排（几何推断 + warning）、空格对齐文本表格重建为 GFM、矢量图页占位与整页 SVG 提取、被裁剪隐形文本抑制 | 标题层级、页眉页脚、断词、链接、复杂视觉表格 |
+| PDF | 文本层、页边界、无文本页/可疑文本层诊断、多栏重排（几何推断 + warning）、空格对齐文本表格重建为 GFM、矢量图页占位与整页 SVG 提取、被裁剪隐形文本抑制、outline 标题层级、URI 链接织入、页眉页脚去重（可关）、行尾断词重合 | 无 outline 的标题推断、GoTo 内部链接、复杂视觉表格 |
 | PPTX | slide 边界、文本、小表、speaker notes | shape 阅读顺序、bullet 层级、合并表格、视觉对象语义 |
 | HTML/URL | article/main/body、标题、段落、列表、链接、表格、代码、图片 alt | 完整 readability、相对链接、复杂嵌套 |
 | EPUB | OPF spine 顺序、章节边界、复用 HTML 语义渲染 | 固定版式、图片/音视频、复杂导航 |
@@ -115,10 +115,10 @@ Rust、Python、Node、WASM 均通过同一个 `ParseResult.warnings` 契约获�
 | 能力 | Agent 场景 | 前置设计 | 验收门槛 |
 | --- | --- | --- | --- |
 | ~~PDF 多栏阅读顺序~~（已落地） | 学术论文、法律文书、报告进入 RAG | 内部 `PdfLayoutDocument` IR 已建于 `parse/pdf_layout.rs` | 已实现：按列重排并发 `pdf_multi_column_reading_order` warning，失败回退原始顺序 |
-| PDF 页眉/页脚/水印分类 | 避免重复噪声污染检索与回答 | 跨页位置与文本重复统计 | 默认只分类和去重，不永久删除；提供保留选项 |
-| PDF 标题层级 | 章节分块、父级元数据、目录导航 | outline 优先；字号/字重/编号启发式作为推断 | 输出标注 `source=outline/inferred` 与置信度；不能全部压成同级 |
-| PDF 文本层清洗 | 修复断词、连字、重复绘制 | 基于 span/行模型，Unicode 字符级处理 | 中英文与代码 fixture 不被误合并；禁止字节级 UTF-8 修改 |
-| PDF 超链接 | Agent 获取可执行的下一步来源 | annotation/anchor 与文本 span 关联 | 跨行 anchor 不丢 URL，无法关联时仍保留目标 |
+| ~~PDF 页眉/页脚分类~~（已落地） | 避免重复噪声污染检索与回答 | 跨页位置与文本重复统计 | 已实现：去重保留首现 + `pdf_repeated_region_deduplicated` warning + 四宿主 `keep_repeated_regions` 保留选项；掏空页面时整体放弃 |
+| ~~PDF 标题层级~~（outline 已落地） | 章节分块、父级元数据、目录导航 | outline 优先；字号/字重/编号启发式作为推断 | 已实现 outline 确定性来源（整行匹配才提升、找不到不伪造）；字号推断仍需带置信度后再进入 |
+| ~~PDF 文本层清洗~~（断词已落地） | 修复断词、连字、重复绘制 | 基于 span/行模型，Unicode 字符级处理 | 已实现保守断词重合（小写-小写、复合词保留连字符、软连字符清除、字符级）；重复绘制抑制此前已落地 |
+| ~~PDF 超链接~~（已落地） | Agent 获取可执行的下一步来源 | annotation/anchor 与文本 span 关联 | 已实现：rect 边界切分 span 精确锚定，跨行 anchor 空白不敏感匹配，无法关联时页尾 `<url>` 兜底；仅放行 http/https/mailto |
 | 合并表格 HTML 降级 | 保留 DOCX/PPTX rowspan/colspan | 统一 `TableIR`，正确处理 continuation cell | 有真实合并 fixture；结构不确定时保留 warning，不伪造 HTML |
 | PPTX 与非栅格视觉占位符 | Agent 决定是否调用外部 VLM | relationship、类型、位置、alt/caption、稳定 id | 文本流位置稳定；可把外部 caption 回填到相同 id |
 
@@ -239,13 +239,16 @@ for warning in result.warnings:
 
 ### 阶段 B：PDF 结构纵深
 
-状态：进行中（约半程）。
+状态：已基本完成（2026-07）。
 
 - ~~建立 `PdfLayoutIR`~~：内部 `PdfLayoutDocument` 已建于 `parse/pdf_layout.rs`。
 - ~~多栏阅读顺序~~：已落地（几何列检测 + 重排 + warning）。
 - ~~文本表格重建~~：已落地（空格对齐表格保守重建为 GFM）。
-- 待做：超链接（`PdfLinkAnnotation` 已定义未消费）、标题层级（outline 优先）、页眉/页脚/水印分类、断词清洗。
-- 每项均提供原始顺序回退、推断来源和 warning。
+- ~~超链接~~：已落地（rect 切分 span 锚定 + 页尾兜底 + scheme 白名单）。
+- ~~标题层级~~：outline 确定性来源已落地；无 outline 的字号推断待置信度设计。
+- ~~页眉/页脚分类~~：已落地（跨页统计 + 去重保留首现 + keep 选项四宿主贯通）。
+- ~~断词清洗~~：已落地（保守小写-小写重合 + 软连字符清除）。
+- 剩余：无 outline 标题推断、复杂视觉表格结构、跨页断词。
 
 ### 阶段 C：运算量上限与取消
 
