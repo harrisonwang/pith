@@ -183,7 +183,7 @@ assert.equal(
   4,
 );
 
-// Quote grounding: four deterministic tiers, spans in UTF-16 code units so
+// Quote grounding: five deterministic tiers, spans in UTF-16 code units so
 // String.prototype.slice recovers the hit directly.
 const locateMd = [
   '## Page 1',

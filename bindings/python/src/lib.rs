@@ -77,10 +77,11 @@ fn extract_media<'py>(
     Ok(PyBytes::new(py, &bytes))
 }
 
-/// Ground an LLM-cited quote in Markdown spoor produced. Returns a dict with
-/// the hit's span, collapsed context, source page, and match method, or `None`
-/// when no deterministic tier matches — the claim the quote backs is then
-/// unverifiable. The span indexes `markdown` as a Python `str`.
+/// Locate LLM-cited text or data in Markdown spoor produced. Exact and
+/// whitespace-insensitive matches are textual; table/numeric matches are
+/// source candidates. `None` only means no tier matched this Markdown; it
+/// makes no claim about omitted source content or factual truth. The span
+/// indexes `markdown` as a Python `str`.
 #[pyfunction(signature = (markdown, quote, provenance_json=None))]
 fn locate_quote(
     py: Python<'_>,
@@ -110,7 +111,12 @@ fn locate_quote(
         "span": {"start": start, "end": end},
         "page": found.page,
         "method": found.method.as_str(),
+        "occurrences": found.occurrences,
+        "corroborated": found.corroborated,
     });
+    if let Some(score) = found.score {
+        value["score"] = serde_json::json!(score);
+    }
     if let Some(anchor) = &found.anchor {
         value["anchor"] =
             serde_json::to_value(anchor).map_err(|error| SpoorError::new_err(error.to_string()))?;

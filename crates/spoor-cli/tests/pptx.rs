@@ -92,14 +92,17 @@ fn image_only_slides_carry_the_no_text_layer_posture() {
     // slide_no_text_layer is the "you got nothing" signal — VLM is mandatory,
     // not an enrichment — and its wording tells the agent whether speaker
     // notes still carried text out (slide 1 has notes, slide 2 does not).
-    // The text control slide (3) draws no posture warning.
+    // The text control slide (3) draws no posture warning. Slide 4 is the
+    // real-world pure-image shape (title + full-bleed screenshot): the title
+    // is a label, not a text layer, so the posture fires there too — this is
+    // what makes 纯图片页 distinguishable from 文字+图片页.
     let parsed = parse_fixture("pptx/11_image_only.pptx", Format::Pptx);
     let posture: Vec<_> = parsed
         .warnings
         .iter()
         .filter(|w| w.code == WarningCode::SlideNoTextLayer)
         .collect();
-    assert_eq!(posture.len(), 2);
+    assert_eq!(posture.len(), 3);
     assert_eq!(
         posture[0].location,
         Some(WarningLocation::Slide { number: 1 })
@@ -110,13 +113,17 @@ fn image_only_slides_carry_the_no_text_layer_posture() {
         Some(WarningLocation::Slide { number: 2 })
     );
     assert!(posture[1].message.contains("不经外部 VLM"));
-    // The recovery-handle warning still rides alongside for both slides.
+    assert_eq!(
+        posture[2].location,
+        Some(WarningLocation::Slide { number: 4 })
+    );
+    // The recovery-handle warning still rides alongside for all image slides.
     let visuals = parsed
         .warnings
         .iter()
         .filter(|w| w.code == WarningCode::EmbeddedVisualsOmitted)
         .count();
-    assert_eq!(visuals, 2);
+    assert_eq!(visuals, 3);
 }
 
 #[test]
@@ -242,11 +249,16 @@ fn merged_table_and_visual_omissions_are_located_by_slide() {
         merged.warnings[0].location,
         Some(WarningLocation::Slide { number: 1 })
     );
-    assert_eq!(visual.warnings[0].code, WarningCode::EmbeddedVisualsOmitted);
-    assert_eq!(
-        visual.warnings[0].location,
-        Some(WarningLocation::Slide { number: 1 })
-    );
+    // 07 is a title + picture slide — the real-world pure-image shape — so
+    // the no-text-layer posture rides in front of the recovery-handle
+    // warning; both locate to slide 1.
+    assert_eq!(visual.warnings[0].code, WarningCode::SlideNoTextLayer);
+    let handles = visual
+        .warnings
+        .iter()
+        .find(|w| w.code == WarningCode::EmbeddedVisualsOmitted)
+        .expect("recovery-handle warning still present");
+    assert_eq!(handles.location, Some(WarningLocation::Slide { number: 1 }));
 }
 
 #[test]

@@ -33,14 +33,14 @@ def read_node_binding_version() -> str:
     return versions.pop()
 
 
-def read_limitations_version() -> str:
-    text = (ROOT / "docs/v1/design/limitations.md").read_text(encoding="utf-8")
+def read_formats_version() -> str:
+    text = (ROOT / "docs/FORMATS_AND_LIMITS.md").read_text(encoding="utf-8")
     versions = set(
         re.findall(r"spoor `v(\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?)`", text)
     )
     if len(versions) != 1:
         raise ValueError(
-            f"expected one limitations.md version, found {sorted(versions)}"
+            f"expected one formats.md version, found {sorted(versions)}"
         )
     return versions.pop()
 
@@ -67,7 +67,7 @@ def main() -> int:
         ]["version"],
         "Node generated binding": read_node_binding_version(),
         "WASM @harrisonwang/spoor-wasm": read_json("crates/spoor-wasm/package.json")["version"],
-        "limitations.md": read_limitations_version(),
+        "formats.md": read_formats_version(),
     }
 
     lock_packages = read_toml("Cargo.lock")["package"]

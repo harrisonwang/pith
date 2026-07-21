@@ -106,7 +106,7 @@ Examples
   spoor https://example.com/report
   spoor \"*.pdf\"
   spoor report.pdf --provenance page
-  spoor report.pdf --pages 1:3 --mode json
+  spoor report.pdf --pages 1:3
   spoor data.xlsx --sheet Sheet1 --limit 50 --offset 100
 ";
 
@@ -114,7 +114,7 @@ Examples
 #[command(
     name = "spoor",
     version,
-    about = "将文档（DOCX/PDF）、表格（XLSX/CSV）、网页和幻灯片（PPTX）转成 LLM 可直接消费的文本",
+    about = "将 PDF、Office 文档、网页和表格转成适合交给 LLM 的 Markdown 或 JSON",
     long_about = None,
     override_usage = "spoor [OPTIONS] <input>...",
     help_template = HELP_TEMPLATE,
@@ -351,9 +351,9 @@ mod tests {
 
         assert_eq!(err.kind(), clap::error::ErrorKind::DisplayHelp);
         let help = err.to_string();
-        assert!(help.contains(
-            "将文档（DOCX/PDF）、表格（XLSX/CSV）、网页和幻灯片（PPTX）转成 LLM 可直接消费的文本"
-        ));
+        assert!(
+            help.contains("将 PDF、Office 文档、网页和表格转成适合交给 LLM 的 Markdown 或 JSON")
+        );
         assert!(help.contains("Usage:"));
         assert!(help.contains("spoor [OPTIONS] <input>..."));
         assert!(help.contains("Arguments:"));

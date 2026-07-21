@@ -26,9 +26,10 @@ pub struct ParseOptions {
     /// Cooperative cap on in-parser work units (e.g. PDF operations) to bound
     /// CPU on pathological inputs. Omit to disable.
     pub max_work_units: Option<i64>,
-    /// Return output→source provenance: `"page"` for page-level (PDF), `"off"`
-    /// (default) for none. Output byte ranges in `provenance` index the returned
-    /// `markdown` as UTF-8 bytes; slice with `Buffer.from(markdown).subarray(...)`.
+    /// Return output→source provenance: `"page"` for page/slide-level,
+    /// `"block"` for the finest available, or `"off"` (default) for none.
+    /// Output byte ranges in `provenance` index the returned `markdown` as
+    /// UTF-8 bytes; slice with `Buffer.from(markdown).subarray(...)`.
     pub provenance: Option<String>,
     /// PDF only: keep cross-page repeated headers/footers instead of
     /// deduplicating them (default false — repeats are removed and a
@@ -68,12 +69,12 @@ pub fn extract_media(
     Ok(Buffer::from(bytes))
 }
 
-/// Ground an LLM-cited quote in Markdown spoor produced. Tries four
-/// deterministic tiers (exact, whitespace-insensitive, table-cell anchor,
-/// numeric/unit equivalence) and returns `null` when none matches — treat the
-/// claim the quote backs as unverifiable. `span` indexes `markdown` as a JS
-/// string (UTF-16 code units), so `markdown.slice(span.start, span.end)` is
-/// the raw hit; `page` comes from spoor's own `## Page N` markers when present.
+/// Locate LLM-cited text or data in Markdown spoor produced. Exact and
+/// whitespace-insensitive matches are textual; table/numeric matches are
+/// source candidates. `null` only means no tier matched this Markdown; scans,
+/// visuals, or parse omissions may still contain the content, and no result
+/// establishes factual truth. `span` uses JS string indices, so
+/// `markdown.slice(span.start, span.end)` is the raw hit.
 #[napi]
 pub fn locate_quote(
     markdown: String,
@@ -105,7 +106,12 @@ pub fn locate_quote(
         "span": {"start": start, "end": end},
         "page": found.page,
         "method": found.method.as_str(),
+        "occurrences": found.occurrences,
+        "corroborated": found.corroborated,
     });
+    if let Some(score) = found.score {
+        value["score"] = serde_json::json!(score);
+    }
     if let Some(anchor) = &found.anchor {
         value["anchor"] = serde_json::to_value(anchor)
             .map_err(|error| Error::new(Status::GenericFailure, error.to_string()))?;

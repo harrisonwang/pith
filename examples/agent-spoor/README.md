@@ -1,33 +1,26 @@
-# agent-spoor
+# 让智能体调用 spoor
 
-把 **spoor** 接入一个最小 AI Agent 的**三种方式**，放在同一个 agent 内核上对照：
+同一个简单智能体，用三种方式调用 spoor：
 
-| 模式 | 接入方式 | 用的 spoor 形态 | 进程 | 谁能复用 | 改 agent 代码 | 何时选它 |
-| --- | --- | --- | --- | --- | --- | --- |
-| ① **原生工具** | 直接写成 `Tool` | Node binding `@harrisonwang/spoor`（同进程） | 同进程 | 只这个 agent | 要 | 要最低延迟、最强类型、最紧集成 |
-| ② **MCP Server** | agent 当 MCP client | Node binding（独立 MCP server 进程） | 独立 stdio | **任意 MCP agent**（本 agent / Claude Desktop / Cursor） | 只加 client，不碰核心 | 要标准化、跨工具复用 |
-| ③ **Skill** | 丢一份 `SKILL.md` | CLI `spoor`（子进程） | 子进程 | 任意能跑 shell 的 agent | 零改逻辑 | 要渐进式扩展、非工程师也能加 |
+| 调用方式 | spoor 在哪里运行 | 适合场景 |
+| --- | --- | --- |
+| 直接调用 | 和智能体在同一进程；使用 Rust、Python 或 Node.js | 需要较低延迟，或要直接读取警告、页码和坐标 |
+| MCP Server | 独立进程，通过标准输入输出通信 | 供 Claude Desktop 等 MCP 客户端调用 |
+| Skill | 智能体按照 `SKILL.md` 调用 CLI | 智能体可以执行命令，但不能直接调用新的程序接口 |
 
-三种模式**共享同一个 agent 内核**（同一循环、同一 LLM 层），差别只在一层 `ToolProvider`——一条命令 `--mode native|mcp|skill` 切换。同样的四个 demo 问题，三种模式跑出**一样的结果**；差异只在"文档能力是怎么进来的"。这正好把 spoor 的"一套引擎、多形态"落成开发者最关心的接入决策题。
+三个示例回答相同的问题，只是调用 spoor 的方法不同。目录按语言分开：
 
-## 目录命名规则
+- [Node.js](node/)：`npm run native|mcp|skill`
+- [Python](python/)：`uv run python -m app --mode native|mcp|skill`
+- [Rust](rust/)：`cargo run -- --mode native|mcp|skill`
 
-按 `agent-spoor/<语言>/` 组织，为多语言实现预留：
+每套实现都附带 PDF、CSV 和含图片的 DOCX，用来检查页码筛选、表格读取、警告和图片提取。
 
-```
-agent-spoor/
-├── README.md      ← 概念与三模式对比（本文件）
-├── node/          ✅ 已实现（TypeScript，@harrisonwang/spoor + CLI）
-├── python/        ✅ 已实现（pyspoor + CLI）
-└── rust/          ✅ 已实现（spoor-core + rmcp + CLI）
-```
+> 这些 MCP Server 只是参考实现，不是已经发布的官方 `spoor-mcp` 包。
 
-每个语言目录是一个自包含、可独立跑的实现，暴露相同的三种模式与同样的 demo。三种模式各对应一种 spoor 交付形态，Rust 版尤其直白：native 直接链 `spoor-core`（源头）、MCP 用 `rmcp` 写 Rust server、skill 走 `spoor` CLI。
+## 安全限制
 
-## 从哪开始
-
-- **Node**：[`node/README.md`](node/README.md) —— `npm run native|mcp|skill`
-- **Python**：[`python/README.md`](python/README.md) —— `uv run python -m app --mode native|mcp|skill`
-- **Rust**：[`rust/README.md`](rust/README.md) —— `cargo run -- --mode native|mcp|skill`
-
-三者都附把同一个 spoor MCP server 插进 Claude Desktop 的配置。
+- 参考实现拒绝直接使用 `../` 访问工作目录以外的文件，但它不是安全沙箱。不要在含有不可信符号链接的目录中运行。
+- 使用 Skill 时只能运行 `spoor` 命令，不允许管道、重定向或其他命令。
+- 单次最多返回 96 KiB，超出后会提示模型只读取相关页、行或列。
+- 示例会调用外部模型。即使文件在本地解析，解析后的文本仍可能发送给模型服务。

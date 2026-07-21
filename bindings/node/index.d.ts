@@ -11,12 +11,12 @@ export declare function detectFormat(data: Buffer, sourceName?: string | undefin
 export declare function extractMedia(data: Buffer, resource: string, options?: ParseOptions | undefined | null): Buffer
 
 /**
- * Ground an LLM-cited quote in Markdown spoor produced. Tries four
- * deterministic tiers (exact, whitespace-insensitive, table-cell anchor,
- * numeric/unit equivalence) and returns `null` when none matches — treat the
- * claim the quote backs as unverifiable. `span` indexes `markdown` as a JS
- * string (UTF-16 code units), so `markdown.slice(span.start, span.end)` is
- * the raw hit; `page` comes from spoor's own `## Page N` markers when present.
+ * Locate LLM-cited text or data in Markdown spoor produced. Exact and
+ * whitespace-insensitive matches are textual; table/numeric matches are
+ * source candidates. `null` only means no tier matched this Markdown; scans,
+ * visuals, or parse omissions may still contain the content, and no result
+ * establishes factual truth. `span` uses JS string indices, so
+ * `markdown.slice(span.start, span.end)` is the raw hit.
  */
 export declare function locateQuote(markdown: string, quote: string, provenanceSpans?: any | undefined | null): any
 
@@ -48,9 +48,10 @@ export interface ParseOptions {
    */
   maxWorkUnits?: number
   /**
-   * Return output→source provenance: `"page"` for page-level (PDF), `"off"`
-   * (default) for none. Output byte ranges in `provenance` index the returned
-   * `markdown` as UTF-8 bytes; slice with `Buffer.from(markdown).subarray(...)`.
+   * Return output→source provenance: `"page"` for page/slide-level,
+   * `"block"` for the finest available, or `"off"` (default) for none.
+   * Output byte ranges in `provenance` index the returned `markdown` as UTF-8;
+   * slice with `Buffer.from(markdown).subarray(...)`.
    */
   provenance?: string
   /**

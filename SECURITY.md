@@ -1,49 +1,54 @@
-# 安全模型
+# 安全说明
 
-`spoor` 使用一个小型、确定性的 Rust core 来解析不可信文档。core 的设计目标是失败时返回结构化错误，但它**不能替代**操作系统或 WASM runtime 的内存限制。
+spoor 可以解析来源不明的文档，但它不能代替沙箱。内置的大小限制和格式检查只能提前拦下一部分异常文件。要强制中止超时任务、限制内存或隔离崩溃，仍需由你的程序处理。
 
-格式保留内容、运行形态与示例的完整边界见
-[能力与限制](docs/v1/design/limitations.md)。
+各格式的限制见[格式与限制](docs/FORMATS_AND_LIMITS.md)。
 
-## 信任边界
+## 各部分负责什么
 
-- `spoor-core` 只接收 bytes 和显式 metadata，不执行任何文件、网络、stdin/stdout、环境变量或进程 I/O。
-- CLI、Python、Node 和 WASM 适配层负责获取 bytes。
-- 原生解析器在调用方进程内执行。需要崩溃隔离或 RSS 限制时，应把 CLI 放在受限的 worker/容器中运行。
-- 所有解析器均不执行文档宏、notebook 代码、脚本、公式或内嵌二进制。
+- `spoor-core` 只接收文件内容、文件名、MIME 类型和筛选参数，不读文件、不联网、不读取环境变量，也不启动其他程序。
+- CLI、Python、Node.js 和 WASM 负责读取文件字节。CLI 只有在输入网址时才会联网。
+- Rust、Python 和 Node.js 版本会和你的程序运行在同一个进程里。需要强制超时、限制内存或隔离崩溃时，应改用独立进程、容器，或限制好内存和执行时间的 WASM 环境。
+- spoor 不执行文档中的宏、公式、脚本、Notebook 代码或其他程序。
+- 文档内容始终是不可信数据。解析不会识别提示注入，也不会判断事实真伪。
 
-## 威胁与防御
+## 内置限制
 
-| 威胁 | 防御措施 | 默认值 | 可配置 |
-| --- | --- | --- | --- |
-| 输入过大 | core 在检测/解析前检查输入字节量 | 64 MiB 共享解析内存上限 | `ParseLimits.max_parse_bytes`；CLI `--max-parse-mib` |
-| ZIP 炸弹：条目过多 | 在中央目录检查阶段拒绝存档 | 10,000 条 | 无公开覆写接口 |
-| ZIP 炸弹：单条目过大 | 拒绝声明或实测超大的条目 | 每条目 50 MiB | 无公开覆写接口 |
-| ZIP 炸弹：压缩比异常 | 拒绝可疑的声明压缩比 | 200× | 无公开覆写接口 |
-| ZIP 炸弹：总解压量膨胀 | 将声明未压缩大小累计计入解析内存上限 | 共享解析内存上限 | `max_parse_bytes` |
-| 输出/token 耗尽 | CLI 截断 stdout，附加带内 marker 或 JSON warning | 256 KiB | CLI `--max-output-kib` |
-| 加密/旧版 Office 混淆 | 在扩展名回退前拦截 OLE/CFB | 稳定错误 `legacy_or_encrypted_office` | 否 |
-| 加密 PDF | 将解密失败映射为稳定错误 | 稳定错误 `encrypted_pdf` | 否 |
-| 无文本无图片 PDF 幻觉风险 | 拒绝无文本层且无图片的 PDF，而非静默返回成功 | 稳定错误 `pdf_no_extractable_content` | 否 |
-| 损坏的容器 | 拒绝无法读取的 ZIP 类格式 | 稳定错误 `invalid_container` | 否 |
-| 未知解析失败或 Rust panic | 在所有公共 core 边界捕获 unwind，归一化为带 stage 的 `parse_failed` | 结构化 `SpoorError` | 否 |
-| 解析无限/极慢 | 无进程内超时；调用方必须自行设置时限 | 不提供 | worker/容器/WASM host |
-| 原生依赖 abort/segfault | 进程内不可恢复 | 不提供 | 对恶意多租户场景优先用 CLI worker 隔离 |
+| 风险 | 默认限制 | 如何调整 |
+| --- | --- | --- |
+| 输入和中间结果过大 | `spoor-core` 每次解析最多 64 MiB；CLI 一次运行处理的所有文件共用 64 MiB | `ParseLimits.max_parse_bytes`；CLI `--max-parse-mib` |
+| ZIP 条目过多 | 最多 10,000 个条目 | 暂不可改 |
+| ZIP 中的单个文件过大 | 最多 50 MiB，并计入总大小 | 暂不可改 |
+| ZIP 中单个文件的压缩比异常 | 最多 200 倍 | 暂不可改 |
+| ZIP 解压后的总量过大 | 解压前检查总量，并计入单次大小限制 | 跟随单次大小限制 |
+| CLI 输出过大 | 标准输出默认最多 256 KiB，截断时保留提示 | CLI `--max-output-kib` |
+| 小文件触发大量计算 | 可限制单次解析的工作量 | `ParseLimits.max_work_units`；CLI `--max-work-units` |
+| 旧版或加密 Office 被当成文本 | 识别 OLE/CFB 后直接拒绝 | 不可改 |
+| 加密 PDF | 返回固定错误码 | 不可改 |
+| 损坏的压缩包类文件 | 返回固定错误码 | 不可改 |
+| Rust 发生 panic | `spoor-core` 会捕获 panic，并返回 `parse_failed` | 不可改 |
 
-## 稳定失败契约
+工作量上限只有在解析器主动检查时才会生效，不能代替强制超时。第三方底层库直接终止或崩溃时，同一进程中的程序也无法恢复。
 
-所有公共入口统一暴露 `code`、`reason`、`hint`、`recoverable` 和 `stage` 字段。消费者**必须按 `code` 分支**，不得依赖本地化的自然语言文本。当前稳定错误码：
+## 错误处理
 
-- `pdf_no_extractable_content`
-- `parse_budget_exceeded`
-- `unsupported_format`
-- `encrypted_pdf`
-- `legacy_or_encrypted_office`
-- `invalid_container`
-- `parse_failed`
+CLI 和各语言包使用同一组 `code`，并附带处理建议，有时还会指出出错环节。程序应根据 `code` 处理错误，不要匹配错误消息中的文字。完整列表见[接口参考](docs/API_REFERENCE.md#错误码)。
 
-core、CLI、Python、Node 和 WASM 的测试路径均覆盖共享预算、无效容器、压缩炸弹和 CFB/OLE 拦截行为。
+## 对外提供服务前
+
+允许用户上传文件，或同时服务多个用户时，至少应做到：
+
+- 独立进程、容器，或限制好内存和执行时间的 WASM 环境；
+- 强制超时、并发限制和进程级内存上限；
+- 请求大小、文件数量和总输出限制；
+- 身份认证、用户数据隔离和速率限制；
+- 不在日志中记录敏感内容，及时清理临时文件，并规定数据保存多久；
+- 不要丢掉 `warnings` 和表格的 `truncated` 状态，不能只判断解析是否成功。
+
+## “本地解析”的含义
+
+spoor 不会主动上传本地文件，但整个使用过程不一定离线。你的应用、浏览器扩展、日志、剪贴板或之后调用的模型服务仍可能把内容发送出去。如果对外宣称“本地解析”，应同时说明原文件和解析后的文字是否会被发送到其他服务。
 
 ## 报告漏洞
 
-**不要**为疑似漏洞创建公开 issue。请通过仓库的 Security 标签页提交私有安全通告，附上最小复现步骤、受影响版本和观察到的实际影响。
+请不要为疑似漏洞创建公开 issue。请通过 GitHub 的 Security 页面提交私有安全报告，并附上最小复现、受影响版本和实际影响。

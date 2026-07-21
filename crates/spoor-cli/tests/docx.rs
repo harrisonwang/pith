@@ -114,7 +114,7 @@ fn xml_space_preserve_runs() {
 #[test]
 fn formatted_whitespace_only_runs_no_panic() {
     // Bold space, italic w:br, hyperlink-only space: md mode keeps raw whitespace,
-    // does not emit ** / * / []() around invisible runs (see ENGINEERING_DECISIONS).
+    // does not emit ** / * / []() around invisible runs (see docs/DESIGN_NOTES.md).
     let out = extract_fixture("docx/13_formatted_whitespace_only_runs.docx", Format::Docx);
     assert_snapshot!(out);
 }

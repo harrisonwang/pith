@@ -753,7 +753,7 @@ fn wrap_run_text(
 
     // Whitespace-only runs (e.g. bold space, italic line break, linked tab) have
     // no slice-stable "middle" for markdown wrapping; for md output we keep the
-    // raw characters and skip ** / * / []() — see docs/ENGINEERING_DECISIONS.md.
+    // raw characters and skip ** / * / []() — see docs/DESIGN_NOTES.md.
     if text.trim().is_empty() {
         return text.to_string();
     }

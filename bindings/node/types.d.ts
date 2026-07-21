@@ -118,10 +118,11 @@ export interface ParseResult {
 export type LocateMethod =
   | 'exact'
   | 'whitespace_insensitive'
+  | 'fuzzy'
   | 'table_anchor'
   | 'numeric_equivalence';
 
-/** A grounded quote: where it sits in the markdown and what surrounds it. */
+/** A located text match or source candidate with its Markdown context. */
 export interface LocatedQuote {
   /**
    * Half-open `[start, end)` range in UTF-16 code units (JS string indices),
@@ -138,6 +139,20 @@ export interface LocatedQuote {
   /** 1-based source page from spoor's `## Page N` markers; null without them. */
   page: number | null;
   method: LocateMethod;
+  /** Similarity of a `fuzzy` hit (1.0 = no edits); absent for other tiers. */
+  score?: number;
+  /**
+   * How many places this tier could have matched (capped at 100); > 1 means
+   * the returned location — and its page/anchor — is one of several
+   * plausible ones.
+   */
+  occurrences: number;
+  /**
+   * `false` marks a data candidate accepted on value uniqueness alone
+   * (numeric tier's synonym rescue), where a fabricated label is
+   * indistinguishable from a synonym.
+   */
+  corroborated: boolean;
   /**
    * Source anchor of the provenance span overlapping the hit the most; only
    * present when `provenanceSpans` was passed. With block-level provenance

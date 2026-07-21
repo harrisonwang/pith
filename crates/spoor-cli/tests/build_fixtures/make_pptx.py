@@ -172,6 +172,11 @@ def build_11_image_only():
     s.shapes.add_picture(BytesIO(png), Inches(2), Inches(2), Inches(4), Inches(3))
     s = prs.slides.add_slide(prs.slide_layouts[5])
     s.shapes.title.text = "Text control slide"
+    # Slide 4: the real-world "pure image" shape — a title placeholder plus a
+    # full-bleed screenshot. The title is a label, not a text layer.
+    s = prs.slides.add_slide(prs.slide_layouts[5])
+    s.shapes.title.text = "Architecture overview"
+    s.shapes.add_picture(BytesIO(png), Inches(0.5), Inches(1.5), Inches(9), Inches(5.5))
     prs.save(OUT / "11_image_only.pptx")
 
 

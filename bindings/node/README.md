@@ -1,50 +1,33 @@
 # @harrisonwang/spoor
 
-Native Node.js bindings for the spoor document engine.
+在 Node.js 和 Electron 应用中解析文件内容，提示可能遗漏的部分，并查找模型引用。它和 CLI 共用同一套 Rust 解析代码，需要 Node.js 18 或更高版本。
+
+```bash
+npm install @harrisonwang/spoor
+```
 
 ```js
-const { parseBytes } = require('@harrisonwang/spoor');
+const fs = require('node:fs');
+const { locateQuote, parseBytes } = require('@harrisonwang/spoor');
 
-const result = parseBytes(Buffer.from('hello\n'), { sourceName: 'note.txt' });
+const result = parseBytes(fs.readFileSync('report.pdf'), {
+  sourceName: 'report.pdf',
+  pages: [1, 3],
+  provenance: 'block',
+});
+
 for (const warning of result.warnings) {
   console.warn(warning.code, warning.location);
 }
+
+const markdown = result.content.value.markdown;
+const found = locateQuote(
+  markdown,
+  '需要查找的引文',
+  result.provenance?.spans,
+);
 ```
 
-Native addons are distributed as optional platform packages. Thrown spoor
-errors expose `code`, `reason`, `hint`, `recoverable`, and `stage`.
-Successful parses can still contain typed integrity warnings; agents must
-inspect `result.warnings`.
+表格可以使用 `sheet`、`rows`、`columns`、`limit` 和 `offset` 筛选；PDF/PPTX 使用 `pages`。`extractMedia(data, uri, options)` 可以通过解析结果中的 `spoor://` 链接提取对应图片或文件。
 
-## Tables: narrowing and pagination
-
-For CSV/XLSX, `parseBytes` accepts the same narrowing options as the CLI, so
-pipelines can page through full tables instead of the default 100-row preview:
-
-```js
-// A slice by inclusive 1-based [first, last] row range (mutually exclusive with limit/offset)
-parseBytes(data, { sourceName: 'data.xlsx', sheet: 'Sheet1', rows: [5, 104] });
-
-// Or paginate by limit/offset and keep only some columns
-parseBytes(data, { sourceName: 'data.xlsx', columns: ['分类', '金额'], limit: 100, offset: 200 });
-```
-
-## PDFs: page ranges
-
-For page-oriented PDFs, pass `pages` (inclusive 1-based) to parse only a slice
-and avoid reading a large document end to end:
-
-```js
-parseBytes(data, { sourceName: 'report.pdf', pages: [1, 3] }); // only pages 1–3
-```
-
-## Extracting embedded media
-
-Resolve a safe media URI emitted in the output (DOCX images, extractable PDF
-images) to a `Buffer` for handing to an external vision model:
-
-```js
-const { extractMedia } = require('@harrisonwang/spoor');
-
-const image = extractMedia(data, 'spoor://docx/part/word/media/image1.png', { sourceName: 'report.docx' });
-```
+完整参数、返回值、警告和错误码见[接口参考](../../docs/API_REFERENCE.md)。

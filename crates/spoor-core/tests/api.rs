@@ -408,7 +408,7 @@ fn locate_quote_grounds_a_citation_in_parsed_output() {
         verbatim
     );
 
-    // A fabricated quote is not located; the claim it backs is unverifiable.
+    // None of the four rules locates this fabricated quote in the Markdown.
     assert!(locate_quote(&document.markdown, "这句话不在文档里").is_none());
 }
 

@@ -1,4 +1,4 @@
-//! Doc-sync tests: guidance surfaces (SKILL.md / README) must track the real
+//! Doc-sync tests: guidance surfaces (SKILL.md / docs/API_REFERENCE.md) must track the real
 //! error contract. Stale guidance is worse than none — an agent that loads
 //! drifted instructions matches strings that no longer exist and misroutes
 //! every failure. Same discipline as `table_usage_lists_every_narrowing_flag`
@@ -14,13 +14,13 @@ fn read_doc(relative: &str) -> String {
 }
 
 /// Every stable error code must be documented where agents load guidance
-/// from (SKILL.md) and where wrapper authors copy from (README). Only the
+/// from (SKILL.md) and where wrapper authors copy from (docs/API_REFERENCE.md). Only the
 /// snake_case codes are pinned — the Chinese reason/hint texts are display
 /// copy and may be reworded freely.
 #[test]
-fn skill_and_readme_document_every_error_code() {
+fn skill_and_api_reference_document_every_error_code() {
     let skill = read_doc("skills/spoor/SKILL.md");
-    let readme = read_doc("README.md");
+    let api = read_doc("docs/API_REFERENCE.md");
 
     for code in spoor_core::ErrorCode::ALL {
         let code = code.as_str();
@@ -28,16 +28,16 @@ fn skill_and_readme_document_every_error_code() {
             skill.contains(code),
             "skills/spoor/SKILL.md 缺少错误码 {code} 的处置指引"
         );
-        assert!(readme.contains(code), "README.md 的错误码表缺少 {code}");
+        assert!(api.contains(code), "docs/API_REFERENCE.md 的错误码表缺少 {code}");
     }
 }
 
 /// Successful parsing can still be incomplete. Every stable warning code must
 /// be taught to agents and listed for wrapper authors.
 #[test]
-fn skill_and_readme_document_every_warning_code() {
+fn skill_and_api_reference_document_every_warning_code() {
     let skill = read_doc("skills/spoor/SKILL.md");
-    let readme = read_doc("README.md");
+    let api = read_doc("docs/API_REFERENCE.md");
 
     for code in spoor_core::WarningCode::ALL {
         let code = code.as_str();
@@ -46,8 +46,8 @@ fn skill_and_readme_document_every_warning_code() {
             "skills/spoor/SKILL.md 缺少完整性警告码 {code} 的处置指引"
         );
         assert!(
-            readme.contains(code),
-            "README.md 的 warning code 表缺少 {code}"
+            api.contains(code),
+            "docs/API_REFERENCE.md 的 warning code 表缺少 {code}"
         );
     }
 }

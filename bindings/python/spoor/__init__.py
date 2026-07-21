@@ -68,9 +68,10 @@ def parse_bytes(
     is an inclusive 1-based ``(first, last)`` range that limits which pages are
     parsed. Each option is ignored by formats it does not apply to.
 
-    ``provenance`` (``"page"``) returns an output→source mapping in
-    ``result.provenance``; output byte ranges index ``markdown`` as UTF-8, so
-    slice with ``markdown.encode("utf-8")[start:end]``.
+    ``provenance="page"`` returns a page/slide-level mapping and ``"block"``
+    requests the finest available mapping. Output byte ranges index
+    ``markdown`` as UTF-8, so slice with
+    ``markdown.encode("utf-8")[start:end]``.
 
     PDF cross-page repeated headers/footers are deduplicated by default (first
     occurrence kept, warning ``pdf_repeated_region_deduplicated`` names what
@@ -163,12 +164,18 @@ def locate_quote(
 ) -> LocatedQuote | None:
     """Ground an LLM-cited quote in Markdown spoor produced.
 
-    Tries four deterministic tiers, strictest first: exact substring,
-    whitespace-insensitive, table-cell anchor (a model quoting table data
-    reassembles "column + row label + value" into a string that is never
-    contiguous in a Markdown table), and numeric/unit equivalence
-    (7771亿 = 777102百万). Returns ``None`` when no tier matches — the quote is
-    not in the document, so treat the claim it backs as unverifiable.
+    Tries five deterministic tiers, strictest first: exact substring,
+    normalized (``whitespace_insensitive``: whitespace, full/half-width and
+    CJK punctuation variants, list/heading markers, link syntax), fuzzy
+    (bounded edit distance with a similarity ``score`` and a hard constraint
+    that every figure in the quote appears in the match), table-cell anchor,
+    and numeric/unit equivalence. The last two return a source candidate, not
+    a verbatim quote; ``corroborated=False`` marks a candidate accepted on
+    value uniqueness alone. ``occurrences > 1`` means the location is one of
+    several plausible ones. ``None`` only means no tier matched the supplied
+    Markdown; scans, visuals, or parse omissions may still contain the
+    content. A match does not establish that the material supports the claim
+    or that the claim is true.
 
     ``result.span`` indexes ``markdown`` as a Python ``str``:
     ``markdown[span["start"]:span["end"]]`` is the raw hit. ``result.page`` is
@@ -193,6 +200,9 @@ def locate_quote(
         after=raw["after"],
         page=raw["page"],
         method=raw["method"],
+        score=raw.get("score"),
+        occurrences=raw["occurrences"],
+        corroborated=raw["corroborated"],
         anchor=raw.get("anchor"),
     )
 

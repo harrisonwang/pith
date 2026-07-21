@@ -1,33 +1,30 @@
 ---
 name: spoor
-description: 读取 PDF/DOCX/XLSX/CSV/PPTX/EPUB/HTML 等文档，转成 LLM 可消费的文本（文档→Markdown，表格→JSON），支持按页/表/行列收窄与内嵌图提取。
+description: 在本地读取 PDF、DOCX、XLSX、CSV、PPTX、EPUB、HTML 等文件。文档输出 Markdown，表格输出 JSON；可以只读取指定页、工作表、行或列，也可以提取文档中的图片。
 ---
 
-# spoor 文档解析技能
+# 使用 spoor 读取文档
 
-当用户要"读 / 总结 / 提取"一个**非纯文本**文档（PDF、Word、Excel、PPT、EPUB、网页…）时，
-用 `run_shell` 调用 `spoor` CLI。纯文本 / 代码文件仍用 `read_file`。
+当用户要读取、总结或提取 PDF、Word、Excel、PPT、EPUB 或网页文件时，用 `run_shell` 调用 `spoor` CLI。
 
 ## 基本用法
 
-- 读整篇：`spoor data/byd.pdf`
-- 读表格（看结构 + 前几行）：`spoor data/sales.csv`
-- 大 PDF 只取某几页：`spoor data/byd.pdf --pages 1:3`
-- XLSX 指定表 + 列 + 行数：`spoor data/book.xlsx --sheet Sheet1 --columns 分类,金额 --limit 20`
+- 读取整份文档：`spoor data/byd.pdf`
+- 查看表格结构和前几行：`spoor data/sales.csv`
+- 只读取 PDF 的几页：`spoor data/byd.pdf --pages 1:3`
+- 指定 XLSX 的工作表、列和行数：`spoor data/book.xlsx --sheet Sheet1 --columns 分类,金额 --limit 20`
 - 行区间（与 --limit/--offset 互斥）：`spoor data/sales.csv --rows 2:4`
 
 ## 输出怎么读
 
-- 文档型 → Markdown；表格型 → JSON（headers + 前 N 行 preview + range）。
-- 结尾可能有 **warnings**，例如 `pdf_page_no_text_layer` 表示某页是扫描件、没有可提取文本层——
-  要**如实转达用户**，不要假装读到了那页内容。
+- 文档返回 Markdown。表格返回 JSON，其中包含表头、实际返回的行和是否截断。
+- 结尾可能有警告。例如，`pdf_page_no_text_layer` 表示某页没有可提取文字。必须告诉用户，不要假装读到了这一页。
 
-## 提取内嵌图（交给 VLM）
+## 提取图片
 
-- 正文里出现 `![...](spoor://...)` 占位符时，用 `spoor <文件> --extract <spoor://...>` 提取；
-  run_shell 会把图片存到 `.spoor-media/`。spoor 本身不解读图片。
+- 正文里出现 `![...](spoor://...)` 链接时，用 `spoor <文件> --extract <spoor://...>` 提取。
+  `run_shell` 会把图片存到 `.spoor-media/`。spoor 本身不识别图片内容，需要时可以交给视觉模型。
 
 ## 出错怎么办
 
-- 按稳定错误 `code` 处理并把 hint 转达用户：`unsupported_format`（不支持的格式）、
-  `encrypted_pdf`（加密 PDF）、`parse_budget_exceeded`（超出解析上限，改用收窄参数）等。
+- 根据错误 `code` 处理，并把 `hint` 告诉用户：`unsupported_format`（不支持的格式）、`encrypted_pdf`（加密 PDF）、`parse_budget_exceeded`（文件或中间结果超过大小限制，应只读取需要的部分）等。

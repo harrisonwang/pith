@@ -141,7 +141,7 @@ test('exposes stable structured error fields', () => {
   );
 });
 
-test('locates quotes across the four deterministic tiers', () => {
+test('locates quotes across the deterministic tiers', () => {
   const md = [
     '## Page 1',
     '',

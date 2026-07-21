@@ -101,7 +101,7 @@ pub fn extract(
                 } else {
                     false
                 };
-            if !body.saw_text && (emitted.total_blips > 0 || tally.opaque > 0) {
+            if !body.saw_body_text && (emitted.total_blips > 0 || tally.opaque > 0) {
                 warnings.push(no_text_layer_warning(number, notes_rendered));
             }
             warnings.extend(feature_warnings(number, features, emitted, tally));
@@ -325,19 +325,19 @@ fn slide_is_hidden(xml: &str) -> Result<bool> {
     }
 }
 
-/// The "you got nothing" posture signal: the slide body rendered no text at
-/// all while visual objects are present, so unlike `EmbeddedVisualsOmitted`
-/// ("what you got is incomplete") the slide is unreadable without routing its
-/// visuals to a VLM. Wording tells the agent whether speaker notes still
-/// carried text out.
+/// The "you got nothing" posture signal: the slide rendered no body text —
+/// a title alone is a label, not content — while visual objects are present.
+/// Unlike `EmbeddedVisualsOmitted` ("what you got is incomplete") the slide
+/// is unreadable without routing its visuals to a VLM. Wording tells the
+/// agent whether speaker notes still carried text out.
 fn no_text_layer_warning(slide: usize, notes_rendered: bool) -> SpoorWarning {
     let message = if notes_rendered {
         format!(
-            "第 {slide} 张幻灯片无文本层：正文没有任何文本，内容全部在图像或图形对象里；演讲者备注已提取，页面视觉仍需交外部 VLM。"
+            "第 {slide} 张幻灯片除标题外无正文文本，内容全部在图像或图形对象里；演讲者备注已提取，页面视觉仍需交外部 VLM。"
         )
     } else {
         format!(
-            "第 {slide} 张幻灯片无文本层：正文没有任何文本，内容全部在图像或图形对象里；不经外部 VLM 此页信息不可用。"
+            "第 {slide} 张幻灯片除标题外无正文文本，内容全部在图像或图形对象里；不经外部 VLM 此页信息不可用。"
         )
     };
     SpoorWarning::at_slide(WarningCode::SlideNoTextLayer, message, slide)
@@ -466,7 +466,7 @@ fn slide_number(name: &str) -> Option<u32> {
 /// posture warning.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 struct SlideBody {
-    saw_text: bool,
+    saw_body_text: bool,
 }
 
 /// Nesting cap for group shapes: far beyond anything a real deck produces, it
@@ -1051,7 +1051,7 @@ struct RenderCtx<'a> {
     image_number: &'a mut usize,
     emission: &'a mut SlideImageEmission,
     tally: &'a mut GraphicTally,
-    saw_text: bool,
+    saw_body_text: bool,
 }
 
 /// Render a parsed shape tree in reading order — title placeholders first,
@@ -1078,14 +1078,14 @@ fn render_slide(
         image_number,
         emission,
         tally,
-        saw_text: false,
+        saw_body_text: false,
     };
     for rid in &background_blips {
         render_blip(rid, None, &mut ctx, md);
     }
     render_shapes(shapes, true, &mut ctx, md);
     SlideBody {
-        saw_text: ctx.saw_text,
+        saw_body_text: ctx.saw_body_text,
     }
 }
 
@@ -1133,7 +1133,7 @@ fn render_shape(shape: Shape, ctx: &mut RenderCtx<'_>, md: &mut MarkdownBuilder)
         ShapeBody::Text { ph, paras } => render_text_paragraphs(ph, paras, ctx, md),
         ShapeBody::Table(rows) => {
             if rows.iter().any(|row| row.iter().any(|c| !c.is_empty())) {
-                ctx.saw_text = true;
+                ctx.saw_body_text = true;
             }
             md.table(&rows);
         }
@@ -1160,7 +1160,7 @@ fn render_shape(shape: Shape, ctx: &mut RenderCtx<'_>, md: &mut MarkdownBuilder)
                     md.paragraph(note);
                 }
                 if table.iter().any(|row| row.iter().any(|c| !c.is_empty())) {
-                    ctx.saw_text = true;
+                    ctx.saw_body_text = true;
                 }
                 ctx.tally.rendered += 1;
             }
@@ -1171,7 +1171,7 @@ fn render_shape(shape: Shape, ctx: &mut RenderCtx<'_>, md: &mut MarkdownBuilder)
                 md.paragraph("Diagram:");
                 let mut items: Vec<String> = texts.iter().map(|t| format!("- {t}")).collect();
                 flush_list(&mut items, md);
-                ctx.saw_text = true;
+                ctx.saw_body_text = true;
                 ctx.tally.rendered += 1;
             }
             _ => ctx.tally.opaque += 1,
@@ -1200,7 +1200,11 @@ fn render_text_paragraphs(
             .join(" ");
         if !text.is_empty() {
             md.heading(3, &text);
-            ctx.saw_text = true;
+            // Deliberately NOT counted as body text: a title is the slide's
+            // label, not its content. Real-world image-only slides almost
+            // always carry a title placeholder ("系统架构图") — counting it
+            // would silence the no-text-layer posture on exactly the pages
+            // that must be routed to a VLM.
         }
         return;
     }
@@ -1215,7 +1219,7 @@ fn render_text_paragraphs(
         if text.is_empty() {
             continue;
         }
-        ctx.saw_text = true;
+        ctx.saw_body_text = true;
         let marker = match para.bullet {
             Bullet::Char => Some("- "),
             Bullet::AutoNum => Some("1. "),
@@ -2121,6 +2125,28 @@ mod shape_render_tests {
     }
 
     #[test]
+    fn title_only_image_slides_still_count_as_no_text_layer() {
+        // The real-world "pure image" slide: a title placeholder plus a
+        // full-bleed screenshot. The title must not fake a text layer —
+        // otherwise this page is indistinguishable from a genuine text+image
+        // page and never gets routed to a VLM.
+        let xml = format!(
+            r#"<p:sld {NS}><p:cSld><p:spTree>
+                {}
+                <p:pic><p:nvPicPr><p:cNvPr id="9" name="img"/></p:nvPicPr>
+                <p:blipFill><a:blip r:embed="rId9"/></p:blipFill></p:pic>
+            </p:spTree></p:cSld></p:sld>"#,
+            sp(r#"<p:ph type="title"/>"#, "", "<a:p><a:t>系统架构图</a:t></a:p>"),
+        );
+        let (out, body) = render_with_body(&xml);
+        assert!(out.contains("### 系统架构图"), "title still renders: {out}");
+        assert!(
+            !body.saw_body_text,
+            "a bare title must not count as body text"
+        );
+    }
+
+    #[test]
     fn timing_text_is_neither_output_nor_counted_as_body_text() {
         // <p:timing> animation data contains text nodes (attrName values); the
         // flat pre-P2 renderer leaked them into output and let them suppress
@@ -2133,7 +2159,7 @@ mod shape_render_tests {
         );
         let (out, body) = render_with_body(&xml);
         assert!(!out.contains("ppt_x"), "timing text leaked: {out}");
-        assert!(!body.saw_text, "timing text must not count as body text");
+        assert!(!body.saw_body_text, "timing text must not count as body text");
     }
 
     #[test]
@@ -2144,7 +2170,7 @@ mod shape_render_tests {
         );
         let (out, body) = render_with_body(&xml);
         assert!(out.contains("Hello CDATA"), "got:\n{out}");
-        assert!(body.saw_text);
+        assert!(body.saw_body_text);
     }
 
     #[test]
@@ -2245,7 +2271,7 @@ mod shape_render_tests {
         );
         let (out, body) = render_with_body(&xml);
         assert!(out.contains('Q') && out.contains('A'), "got:\n{out}");
-        assert!(body.saw_text, "surviving text must count as body text");
+        assert!(body.saw_body_text, "surviving text must count as body text");
     }
 
     #[test]

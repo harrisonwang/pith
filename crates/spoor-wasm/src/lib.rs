@@ -27,8 +27,8 @@ pub fn detect_format(
 /// other bindings: `sheet` (XLSX only), `rows` as an inclusive 1-based
 /// `[first, last]` pair (mutually exclusive with `limit`/`offset`), `columns`
 /// to keep, and `limit`/`offset` for pagination. For page-oriented formats
-/// (PDF pages, PPTX slides), `pages` is an inclusive 1-based `[first, last]` range. `provenance`
-/// (`"page"`/`"off"`) returns an output→source page mapping.
+/// (PDF pages, PPTX slides), `pages` is an inclusive 1-based `[first, last]`
+/// range. `provenance` accepts `"page"`, `"block"`, or `"off"` (default).
 /// `keep_repeated_regions` keeps PDF cross-page repeated headers/footers
 /// instead of deduplicating them. Each is ignored by formats it does not
 /// apply to, and all are optional, so existing 5-argument calls keep working.
@@ -102,12 +102,12 @@ pub fn extract_media(
     spoor_core::extract_media(&request, &resource).map_err(error_value)
 }
 
-/// Ground an LLM-cited quote in Markdown spoor produced. Tries four
-/// deterministic tiers (exact, whitespace-insensitive, table-cell anchor,
-/// numeric/unit equivalence) and returns `null` when none matches — treat the
-/// claim the quote backs as unverifiable. `span` indexes `markdown` as a JS
-/// string (UTF-16 code units), so `markdown.slice(span.start, span.end)` is
-/// the raw hit; `page` comes from spoor's own `## Page N` markers when present.
+/// Locate LLM-cited text or data in Markdown spoor produced. Exact and
+/// whitespace-insensitive matches are textual; table/numeric matches are
+/// source candidates. `null` only means no tier matched this Markdown; scans,
+/// visuals, or parse omissions may still contain the content, and no result
+/// establishes factual truth. `span` uses JS string indices, so
+/// `markdown.slice(span.start, span.end)` is the raw hit.
 #[wasm_bindgen]
 pub fn locate_quote(
     markdown: &str,
@@ -127,6 +127,10 @@ pub fn locate_quote(
         span: Span,
         page: Option<usize>,
         method: &'static str,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        score: Option<f64>,
+        occurrences: usize,
+        corroborated: bool,
         #[serde(skip_serializing_if = "Option::is_none")]
         anchor: &'a Option<spoor_core::SourceAnchor>,
     }
@@ -157,6 +161,9 @@ pub fn locate_quote(
         span: Span { start, end },
         page: found.page,
         method: found.method.as_str(),
+        score: found.score,
+        occurrences: found.occurrences,
+        corroborated: found.corroborated,
         anchor: &found.anchor,
     };
     serde_wasm_bindgen::to_value(&located).map_err(|error| JsValue::from_str(&error.to_string()))

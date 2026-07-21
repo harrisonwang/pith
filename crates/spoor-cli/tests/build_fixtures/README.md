@@ -1,6 +1,6 @@
-# 构建测试用例（fixtures）
+# 生成测试文件
 
-`tests/fixtures/` 下的测试用例已提交到 git，是所有测试的唯一真源。只有在新增测试场景或修复 fixture 生成脚本 bug 时，才需要重新生成。
+`tests/fixtures/` 中的文件已经提交到 git，测试时直接使用。只有新增测试场景或修复生成脚本时，才需要重新生成。
 
 ## 依赖安装
 
@@ -8,10 +8,10 @@
 pip install python-docx openpyxl python-pptx reportlab
 ```
 
-## 一键重建所有 fixture
+## 重新生成全部测试文件
 
 ```bash
-cd tests/build_fixtures
+cd crates/spoor-cli/tests/build_fixtures
 python3 make_docx.py
 python3 make_docx_lists.py
 python3 make_xlsx.py
@@ -22,26 +22,20 @@ python3 make_html.py
 python3 make_misc.py
 ```
 
-## 新增测试用例的步骤
+## 新增测试文件
 
 1. 在对应的 `make_*.py` 脚本中添加一个 `build_NN_描述性名字()` 函数。
-2. 运行该脚本生成新 fixture。
+2. 运行脚本生成新文件。
 3. 在 `tests/<format>.rs` 添加对应的 `#[test]`。
-4. 更新 `docs/test-matrix/` 下面的测试矩阵说明文档。
-5. 执行 `cargo test`，首次运行会生成快照（snapshot）。
-6. 检查 `tests/snapshots/` 目录下新生成的 `.snap` 文件，如果内容正确，提交到仓库。
+4. 如果对外支持范围发生变化，更新 `docs/FORMATS_AND_LIMITS.md`。
+5. 执行 `cargo test`，首次运行会生成快照。
+6. 检查 `tests/snapshots/` 中新生成的 `.snap` 文件，确认正确后再提交。
 
 ## 命名规范与注意事项
 
 - 文件命名格式：`NN_描述性名字.ext`（如 `01_basic.docx`）。
-- 每个 fixture 只测试一个核心概念，不要将多个功能堆在一个文件。
-- 如需覆盖特殊结构（定制 namespace、错误/特殊 xml、边界场景），建议手写 XML，不要单纯依赖 python-docx/openpyxl 等库，它们对底层结构做了太多封装。
-- 请在 `docs/test-matrix/<format>.md` 文件里说明每个 fixture 的设计目标、验证点和已知缺口。
+- 每个文件只测试一个重点，不要把多个功能放在一起。
+- 如需测试特殊结构，例如自定义 XML 命名空间、不规范或少见的 XML，以及极端输入，建议直接编写 XML。python-docx、openpyxl 等库可能自动改写底层结构。
+- 文件名、生成函数名和测试名应直接说明测试目的，不再维护重复的逐文件说明表。
 
-## 查看 extract-text 对 fixture 的行为
-
-```bash
-extract-text tests/fixtures/docx/01_basic.docx
-```
-
-仅建议在排查 snapshot diff 时临时查看。契约判定以 `docs/ENGINEERING_DECISIONS.md` 为准，覆盖范围以 `docs/test-matrix/` 为主，最终断言输出以 `tests/snapshots/` 内快照为准。
+支持范围见 `docs/FORMATS_AND_LIMITS.md`，设计说明见 `docs/DESIGN_NOTES.md`。测试代码和 `tests/snapshots/` 中的快照才是最终判断依据。

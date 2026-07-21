@@ -67,6 +67,7 @@ class TextRange(TypedDict):
 LocateMethod = Literal[
     "exact",
     "whitespace_insensitive",
+    "fuzzy",
     "table_anchor",
     "numeric_equivalence",
 ]
@@ -83,7 +84,7 @@ class QuoteSpan(TypedDict):
 
 @dataclass(frozen=True, slots=True)
 class LocatedQuote:
-    """A grounded quote: where it sits in the markdown and what surrounds it."""
+    """A located text match or source candidate with its Markdown context."""
 
     span: QuoteSpan
     before: str
@@ -91,6 +92,13 @@ class LocatedQuote:
     after: str
     page: int | None
     method: LocateMethod
+    #: Similarity of a ``fuzzy`` hit (1.0 = no edits); ``None`` otherwise.
+    score: float | None = None
+    #: How many places this tier could have matched (capped at 100); > 1
+    #: means the returned location is one of several plausible ones.
+    occurrences: int = 1
+    #: ``False`` marks a data candidate accepted on value uniqueness alone.
+    corroborated: bool = True
     anchor: SourceAnchor | None = None
 
 

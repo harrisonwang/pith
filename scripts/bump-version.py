@@ -44,7 +44,7 @@ SPECS: list[dict] = [
     # napi regenerates index.js, so the count is not fixed — require >= 1 each.
     {"path": "bindings/node/index.js", "templates": ["!== '{v}'", "expected {v} but got"]},
     # Documentation prose: at least one ``vX.Y.Z`` mention.
-    {"path": "docs/v1/design/limitations.md", "templates": ["v{v}"]},
+    {"path": "docs/FORMATS_AND_LIMITS.md", "templates": ["v{v}"]},
 ]
 
 CARGO_LOCKS = ("Cargo.lock", "examples/tauri-desktop/src-tauri/Cargo.lock")
