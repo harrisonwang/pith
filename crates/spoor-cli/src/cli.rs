@@ -49,10 +49,11 @@ impl From<ModeArg> for OutputMode {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
 pub(crate) enum ProvenanceArg {
-    /// One mapping per source page (PDF page-level).
+    /// One mapping per source page (PDF) or slide (PPTX).
     Page,
     /// One mapping per rendered line with an approximate bounding box
-    /// (PDF, born-digital); unmatched bytes stay page-anchored.
+    /// (PDF, born-digital); unmatched bytes stay page-anchored. PPTX stays
+    /// at one span per slide at both levels.
     Block,
 }
 
@@ -140,7 +141,7 @@ pub(crate) struct Cli {
     )]
     pub(crate) mode: Option<ModeArg>,
 
-    /// 仅提取 PDF 指定页，如 `1:3`。
+    /// 仅提取指定页范围，如 `1:3`（PDF 按页，PPTX 按幻灯片）。
     #[arg(long, value_name = "first:last")]
     pub(crate) pages: Option<String>,
 

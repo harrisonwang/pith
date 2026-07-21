@@ -1,0 +1,11 @@
+---
+source: crates/spoor-cli/tests/pptx.rs
+expression: out
+---
+## Slide 1
+
+Top left
+
+Top right
+
+Bottom row

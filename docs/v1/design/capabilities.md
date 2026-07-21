@@ -79,8 +79,10 @@ ParseContent + stats
 | PDF 可疑文本层保守诊断 | `pdf_page_suspicious_text_layer` | 不直接信任包含替换字符、控制字符或重复 glyph 占位符的页面 |
 | DOCX/PPTX 合并表格降级诊断 | `merged_table_structure_not_preserved` | 不把 GFM 空白/重复单元格当作原始 rowspan/colspan |
 | DOCX/PPTX 视觉对象省略诊断 | `embedded_visuals_omitted` | 知道文本输出是残缺视图；DOCX/PPTX 可按安全图片占位符提取相关图片，其他对象按需调用外部视觉解析 |
+| PPTX 无文本层诊断 | `slide_no_text_layer` | 该幻灯片正文"什么都没拿到"（零文本、内容全在视觉对象里）：必须把该页视觉路由给外部 VLM，否则按信息缺失处理；区别于 `embedded_visuals_omitted` 的"拿到但不完整" |
+| PPTX 隐藏幻灯片省略 | `hidden_slide_omitted` | 作者已从放映中撤下该页：正文省略、页码保留；不把它当空白页，也不引用未放映内容 |
 | DOCX/PPTX 内嵌图片位置与安全路径 | `spoor://docx/part/word/media/*` 与 `spoor://pptx/part/ppt/media/*` | Agent 可按正文/幻灯片顺序选择图片，通过 CLI 安全提取后交给外部 VLM |
-| 单资源内嵌媒体提取 | `--extract <uri>` / `extract_media` | 使用格式无关入口按安全 URI 原样输出；当前仅支持 DOCX，后续格式沿用同一入口 |
+| 单资源内嵌媒体提取 | `--extract <uri>` / `extract_media` | 使用格式无关入口按安全 URI 原样输出；支持 DOCX/PPTX 的 OPC 媒体与 PDF 的图片/页面 SVG，后续格式沿用同一入口 |
 | warning 结构化位置 | `location.kind = page/slide` | 精确路由受影响页或幻灯片 |
 | CLI in-band warning | stdout + stderr | 只读取 stdout 的 Agent 也不会错过完整性警告 |
 | PDF 中间页失败传播 | `parse_failed` | 不再把前几页的部分结果误报为完整成功 |

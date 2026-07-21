@@ -27,7 +27,7 @@ pub fn detect_format(
 /// other bindings: `sheet` (XLSX only), `rows` as an inclusive 1-based
 /// `[first, last]` pair (mutually exclusive with `limit`/`offset`), `columns`
 /// to keep, and `limit`/`offset` for pagination. For page-oriented formats
-/// (PDF), `pages` is an inclusive 1-based `[first, last]` range. `provenance`
+/// (PDF pages, PPTX slides), `pages` is an inclusive 1-based `[first, last]` range. `provenance`
 /// (`"page"`/`"off"`) returns an output→source page mapping.
 /// `keep_repeated_regions` keeps PDF cross-page repeated headers/footers
 /// instead of deduplicating them. Each is ignored by formats it does not

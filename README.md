@@ -98,15 +98,16 @@ Agent 应优先调用 `parse` 并处理 `warnings[]`。只需要 Markdown 的兼
 Python 使用 `pyspoor` 的 `parse_bytes` / `parse_path`；Node.js 使用
 `@harrisonwang/spoor`；浏览器与 Edge Runtime 使用
 `@harrisonwang/spoor-wasm`。表格筛选（`sheet`/`rows`/`columns`/`limit`/`offset`）、
-PDF 页码筛选（`pages`）与内嵌媒体提取（`extract_media`）在 CLI、Python、Node、WASM
-行为等价，嵌入式调用可直接分页拉取整张表或只取 PDF 指定页。PDF 默认解析全部页；
-`stats.page_count` 始终报告总页数（即便只取了某几页），所以可以用 `--pages 1:1`
-廉价地"探一眼"页数，再决定要不要、要哪段。`--provenance page`（各绑定为 `provenance`
-选项）返回每页"输出 markdown 字节区间 → 源页码"的来源定位映射，便于把 LLM 引用锚定
-回原文页；`--provenance block` 进一步细到行级，born-digital 行附 PDF 原生坐标
-包围盒（可直接交给 PDF.js 画高亮框），被改写或几何不可信的字节保持页级锚定；
-纯文本/Markdown 返回输入字节区间锚点，CSV/XLSX 文档模式返回单元格锚点
-（`{sheet, row, column}`）；默认关闭。从 `v0.8.3` 起，发布的
+页码筛选（`pages`，PDF 按页、PPTX 按幻灯片）与内嵌媒体提取（`extract_media`）在
+CLI、Python、Node、WASM 行为等价，嵌入式调用可直接分页拉取整张表或只取指定页。
+PDF/PPTX 默认解析全部页；`stats.page_count` 始终报告总页数（即便只取了某几页），
+所以可以用 `--pages 1:1` 廉价地"探一眼"页数，再决定要不要、要哪段。
+`--provenance page`（各绑定为 `provenance` 选项）返回每页"输出 markdown 字节区间 →
+源页码"的来源定位映射，便于把 LLM 引用锚定回原文页；`--provenance block` 进一步细
+到行级，born-digital 行附 PDF 原生坐标包围盒（可直接交给 PDF.js 画高亮框），被改写
+或几何不可信的字节保持页级锚定；PPTX 返回幻灯片锚点（`{kind: "slide", number}`，
+编号为放映顺序页码），纯文本/Markdown 返回输入字节区间锚点，CSV/XLSX 文档模式返回
+单元格锚点（`{sheet, row, column}`）；默认关闭。从 `v0.8.3` 起，发布的
 WASM 包默认包含全部重点格式；
 需要更小体积时可自行构建 `core-formats`。
 
@@ -176,9 +177,11 @@ Python `provenance=`、Node/WASM 第三参），命中会附带来源锚点 `anc
 | `pdf_page_suspicious_text_layer` | 某页文本层包含明显可疑字符或 glyph 占位符 |
 | `pdf_multi_column_reading_order` | 某页检测到多栏版面，已按列重排阅读顺序（几何推断，可能不完美） |
 | `merged_table_structure_not_preserved` | DOCX/PPTX 合并单元格未被 GFM 表格完整保留 |
-| `embedded_visuals_omitted` | DOCX/PPTX 中存在尚未被理解或未进入文本输出的视觉对象；DOCX/PPTX 内嵌栅格图片可能已有 `spoor://docx/part/` / `spoor://pptx/part/` 占位符，PDF 同理用 `spoor://pdf/obj/` |
+| `embedded_visuals_omitted` | DOCX/PPTX 中存在尚未被理解或未进入文本输出的视觉对象；DOCX/PPTX 内嵌栅格图片可能已有 `spoor://docx/part/` / `spoor://pptx/part/` 占位符，PDF 同理用 `spoor://pdf/obj/`。PPTX 图表数据与 SmartArt 文本已内联抽取，解构完整的页不报此警告 |
 | `vector_graphics_omitted` | PDF 某页含矢量绘制的图（流程图/图表/示意图），未转成文本输出；正文该页末尾附 `spoor://pdf/page/N` 链接，可 `--extract` 取该页 SVG 图交视觉模型 |
 | `pdf_repeated_region_deduplicated` | PDF 跨页重复的页眉/页脚已去重，仅保留首次出现；`--keep-repeated-regions`（各绑定为 `keep_repeated_regions` 选项）可保留逐字原文 |
+| `slide_no_text_layer` | PPTX 某页正文没有任何文本，内容全部在图像/图形对象里——比 `embedded_visuals_omitted`（"拿到的不完整"）更强的信号（"什么都没拿到"）；不把该页视觉交给外部 VLM，这页信息就是不可用的 |
+| `hidden_slide_omitted` | PPTX 某页被作者标记为隐藏（放映不显示），正文已省略；页码保留，与 PowerPoint 显示的编号对齐 |
 
 warning 可带 `location: {kind: "page" | "slide", number}`。CLI 会同时在 stderr 和
 Markdown stdout 尾部显示这些 warning，避免只读 stdout 的 Agent 静默忽略。

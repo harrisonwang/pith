@@ -67,10 +67,20 @@ pub enum WarningCode {
     EmbeddedVisualsOmitted,
     VectorGraphicsOmitted,
     PdfRepeatedRegionDeduplicated,
+    /// A slide whose body has no text at all while visual objects are present:
+    /// the stronger sibling of [`EmbeddedVisualsOmitted`]. That code means
+    /// "what you got is incomplete"; this one means "you got nothing" — the
+    /// slide's content is unreadable without routing its visuals to an
+    /// external VLM. The PPTX analog of [`PdfPageNoTextLayer`].
+    SlideNoTextLayer,
+    /// A slide the author marked hidden (`show="0"`). Its body is omitted but
+    /// its number is kept, so slide numbering stays aligned with what
+    /// PowerPoint displays and with every other warning and anchor.
+    HiddenSlideOmitted,
 }
 
 impl WarningCode {
-    pub const ALL: [WarningCode; 7] = [
+    pub const ALL: [WarningCode; 9] = [
         WarningCode::PdfPageNoTextLayer,
         WarningCode::PdfPageSuspiciousTextLayer,
         WarningCode::PdfMultiColumnReadingOrder,
@@ -78,6 +88,8 @@ impl WarningCode {
         WarningCode::EmbeddedVisualsOmitted,
         WarningCode::VectorGraphicsOmitted,
         WarningCode::PdfRepeatedRegionDeduplicated,
+        WarningCode::SlideNoTextLayer,
+        WarningCode::HiddenSlideOmitted,
     ];
 
     pub const fn as_str(self) -> &'static str {
@@ -89,6 +101,8 @@ impl WarningCode {
             Self::EmbeddedVisualsOmitted => "embedded_visuals_omitted",
             Self::VectorGraphicsOmitted => "vector_graphics_omitted",
             Self::PdfRepeatedRegionDeduplicated => "pdf_repeated_region_deduplicated",
+            Self::SlideNoTextLayer => "slide_no_text_layer",
+            Self::HiddenSlideOmitted => "hidden_slide_omitted",
         }
     }
 }
@@ -111,7 +125,7 @@ pub struct ParseStats {
     pub input_bytes: usize,
     pub output_bytes: usize,
     pub format: Format,
-    /// Total page count for page-oriented formats (currently PDF), regardless of
+    /// Total page count for page-oriented formats (PDF pages, PPTX slides), regardless of
     /// any page-range slice. Lets a caller learn the whole document size from a
     /// cheap one-page read, then decide whether to request a wider range.
     /// `None` for formats without a page model.
@@ -194,6 +208,12 @@ pub enum SourceAnchor {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         bbox: Option<Rect>,
     },
+    /// Slide-oriented formats (currently PPTX): the 1-based position in the
+    /// deck's presentation order (`sldIdLst`), matching the slide number
+    /// PowerPoint shows and [`WarningLocation::Slide`]. A slide is a small
+    /// enough citation unit that no finer geometry is emitted: "read slide N"
+    /// grounds a quote as tightly as a page box does for a dense PDF page.
+    Slide { number: usize },
     /// Linear formats (plain text / Markdown): the half-open byte range in
     /// the *input* the output span came from. When the output is
     /// byte-identical to the input the mapping is exact; a re-encoded input

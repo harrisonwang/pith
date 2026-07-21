@@ -1,10 +1,10 @@
 ---
-source: tests/pptx.rs
+source: crates/spoor-cli/tests/pptx.rs
 expression: out
 ---
 ## Slide 1
 
-Slide with notes
+### Slide with notes
 
 Notes:
 
@@ -12,4 +12,4 @@ These are speaker notes that explain the slide.
 
 ## Slide 2
 
-Slide without notes
+### Slide without notes

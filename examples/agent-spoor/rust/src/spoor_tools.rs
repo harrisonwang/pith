@@ -24,7 +24,7 @@ pub fn spoor_tool_specs() -> Vec<Value> {
                     "type": "object",
                     "properties": {
                         "path": {"type": "string", "description": "项目内文档路径，如 data/byd.pdf"},
-                        "pages": {"type": "array", "items": {"type": "number"}, "description": "[起,止] 1-based 闭区间，仅 PDF"},
+                        "pages": {"type": "array", "items": {"type": "number"}, "description": "[起,止] 1-based 闭区间，PDF 按页、PPTX 按幻灯片"},
                         "sheet": {"type": "string", "description": "XLSX 工作表名"},
                         "rows": {"type": "array", "items": {"type": "number"}, "description": "[起,止] 行区间；与 limit/offset 互斥"},
                         "columns": {"type": "array", "items": {"type": "string"}, "description": "只保留这些列名"},
@@ -143,12 +143,20 @@ fn format_result(rel: &str, result: &spoor_core::ParseResult) -> String {
             .iter()
             .take(12)
             .map(|sp| {
-                let SourceAnchor::Page { number } = sp.source;
-                format!("p{number}:[{},{})", sp.output.start, sp.output.end)
+                let source = match &sp.source {
+                    SourceAnchor::Page { number, .. } => format!("p{number}"),
+                    SourceAnchor::Slide { number } => format!("slide{number}"),
+                    SourceAnchor::Input { start, end } => format!("input[{start},{end})"),
+                    SourceAnchor::Cell { sheet, row, column } => match sheet {
+                        Some(sheet) => format!("cell[{sheet}!{column}:{row}]"),
+                        None => format!("cell[{column}:{row}]"),
+                    },
+                };
+                format!("{source}:[{},{})", sp.output.start, sp.output.end)
             })
             .collect();
         out.push_str(&format!(
-            "\n〔provenance〕输出字节区间→源页：{}",
+            "\n〔provenance〕输出字节区间→源锚点：{}",
             spans.join(" ")
         ));
     }

@@ -41,10 +41,11 @@ pub enum ProvenanceLevel {
     /// No provenance (default; output is byte-identical to before).
     #[default]
     Off,
-    /// One mapping per source page (currently PDF). Coarse and small.
+    /// One mapping per source page (PDF) or slide (PPTX). Coarse and small.
     Page,
     /// One mapping per rendered line with an approximate bounding box
-    /// (currently PDF, born-digital only). Fine-grained and larger; lines
+    /// (PDF, born-digital only; PPTX stays at one span per slide — a slide
+    /// is already a tight citation unit). Fine-grained and larger; lines
     /// whose text was rewritten during rendering or whose geometry is not
     /// trustworthy fall back to page-anchored spans without a box, so every
     /// output byte still resolves to a page.
@@ -161,8 +162,8 @@ impl TableFilter {
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DocumentFilter {
-    /// Inclusive 1-based page range for page-oriented document formats.
-    /// Currently only PDF uses this to avoid extracting unrequested pages.
+    /// Inclusive 1-based page range for page-oriented document formats:
+    /// PDF pages and PPTX slides. Both skip extracting unrequested pages.
     pub page_range: Option<(usize, usize)>,
     /// Keep cross-page repeated headers/footers instead of deduplicating
     /// them (PDF). Off by default: repeated page furniture pollutes retrieval

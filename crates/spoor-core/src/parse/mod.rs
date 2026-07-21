@@ -51,7 +51,7 @@ mod xml;
 pub(crate) struct ExtractedMarkdown {
     pub markdown: String,
     pub warnings: Vec<SpoorWarning>,
-    /// Total document unit count for page-oriented formats (currently PDF pages),
+    /// Total document unit count for page-oriented formats (PDF pages, PPTX slides),
     /// computed independently of any page-range slice so callers learn the whole
     /// size even from a one-page peek. `None` for formats without a page model.
     pub page_count: Option<usize>,
@@ -97,7 +97,7 @@ pub fn extract(
         Format::Pdf => extract_pdf(source, document_filter, max_parse_bytes, provenance),
         Format::Docx => extract_docx(source, document_filter, max_parse_bytes),
         Format::Xlsx => extract_xlsx(source, max_parse_bytes, provenance),
-        Format::Pptx => extract_pptx(source, document_filter, max_parse_bytes),
+        Format::Pptx => extract_pptx(source, document_filter, max_parse_bytes, provenance),
         Format::Csv => extract_csv(source, max_parse_bytes, provenance),
         Format::Ipynb => extract_ipynb(source, document_filter, max_parse_bytes),
         Format::Epub => extract_epub(source, document_filter, max_parse_bytes),
@@ -315,7 +315,28 @@ fn extract_pdf(
 }
 
 diagnostic_extractor!(extract_docx, "office", docx);
-diagnostic_extractor!(extract_pptx, "office", pptx);
+
+#[cfg(feature = "office")]
+fn extract_pptx(
+    source: &Source<'_>,
+    document_filter: &DocumentFilter,
+    max_parse_bytes: usize,
+    provenance: ProvenanceLevel,
+) -> Result<ExtractedMarkdown> {
+    pptx::extract(source, document_filter, max_parse_bytes, provenance)
+}
+
+#[cfg(not(feature = "office"))]
+fn extract_pptx(
+    _source: &Source<'_>,
+    _document_filter: &DocumentFilter,
+    _max_parse_bytes: usize,
+    _provenance: ProvenanceLevel,
+) -> Result<ExtractedMarkdown> {
+    Err(anyhow!(
+        "format disabled at compile time; enable feature office"
+    ))
+}
 
 #[cfg(feature = "tables")]
 fn extract_csv_tables(

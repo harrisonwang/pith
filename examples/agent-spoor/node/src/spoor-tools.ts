@@ -145,7 +145,7 @@ export const SPOOR_TOOLS: SpoorToolDef[] = [
       type: "object",
       properties: {
         path: { type: "string", description: "项目内文档路径，如 data/byd.pdf" },
-        pages: { type: "array", items: { type: "number" }, description: "[起,止] 1-based 闭区间，仅 PDF，只解析这些页" },
+        pages: { type: "array", items: { type: "number" }, description: "[起,止] 1-based 闭区间，PDF 按页、PPTX 按幻灯片，只解析这些页" },
         sheet: { type: "string", description: "XLSX 工作表名" },
         rows: { type: "array", items: { type: "number" }, description: "[起,止] 1-based 行区间；与 limit/offset 互斥" },
         columns: { type: "array", items: { type: "string" }, description: "只保留这些列名" },

@@ -66,6 +66,16 @@ impl MarkdownBuilder {
         self.ensure_blank_line();
     }
 
+    /// Current UTF-8 byte length of the buffer. Lets a parser record block
+    /// offsets for provenance while it appends (call after [`blank_line`] so
+    /// the recorded block starts after the separator, mirroring PDF's "the
+    /// gap between blocks belongs to no page").
+    ///
+    /// [`blank_line`]: MarkdownBuilder::blank_line
+    pub fn len(&self) -> usize {
+        self.buf.len()
+    }
+
     fn ensure_blank_line(&mut self) {
         if self.buf.is_empty() {
             return;

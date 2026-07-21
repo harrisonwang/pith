@@ -1,0 +1,8 @@
+last_synced_sha: 73473c4c756d3835931ff27575b2c110dced4b4d
+last_synced_date: 2026-06-30
+audience:
+  primary: 把 spoor 嵌入 LLM/Agent 管线的应用工程师 —— 在产品里调用 parse()（Rust/Python/Node/WASM 任一形态）把用户提供的 PDF/DOCX/表格转成 LLM 可直接消费的文本；关心统一的 ParseResult 形状、warnings 与 SpoorError 的处理、大输入的收窄，以及用 provenance 把回答锚回原文。
+  secondary:
+    - 边缘 / 沙箱工程师 —— 在浏览器、Cloudflare Workers、Lambda、多租户容器里跑 WASM/原生引擎，要求文档不出端、恶意文件可隔离；关心 parse/work 预算、ZIP 炸弹防御、输出封顶、安全 spoor:// URI、WASM 构建变体。
+  inferred: false
+ask_audience: true

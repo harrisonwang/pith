@@ -21,7 +21,7 @@ pub struct ParseOptions {
     pub limit: Option<u32>,
     /// Skip this many data rows before applying `limit`.
     pub offset: Option<u32>,
-    /// PDF only: inclusive 1-based `[first, last]` page range to parse.
+    /// Page-oriented formats (PDF pages, PPTX slides): inclusive 1-based `[first, last]` range to parse.
     pub pages: Option<Vec<u32>>,
     /// Cooperative cap on in-parser work units (e.g. PDF operations) to bound
     /// CPU on pathological inputs. Omit to disable.

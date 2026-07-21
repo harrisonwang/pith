@@ -1,0 +1,15 @@
+---
+source: crates/spoor-cli/tests/pptx.rs
+expression: out
+---
+## Slide 1
+
+### Alpha
+
+## Slide 2
+
+### Beta
+
+## Slide 3
+
+### Gamma

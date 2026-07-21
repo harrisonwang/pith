@@ -1,0 +1,7 @@
+---
+source: crates/spoor-cli/tests/pptx.rs
+expression: out
+---
+## Slide 1
+
+![PPTX image 1 (slide 1): Quarterly revenue chart evil x](spoor://pptx/part/ppt/media/image1.png)

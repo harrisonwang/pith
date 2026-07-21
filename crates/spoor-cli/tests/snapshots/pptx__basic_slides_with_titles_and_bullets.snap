@@ -1,19 +1,17 @@
 ---
-source: tests/pptx.rs
+source: crates/spoor-cli/tests/pptx.rs
 expression: out
 ---
 ## Slide 1
 
-Title Slide
+### Title Slide
 
 A subtitle
 
 ## Slide 2
 
-Second slide
+### Second slide
 
-First bullet
-
-Second bullet
-
-Nested item
+- First bullet
+- Second bullet
+    - Nested item

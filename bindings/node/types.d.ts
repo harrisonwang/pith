@@ -16,14 +16,15 @@ export interface ParseOptions {
   limit?: number;
   /** Skip this many data rows before applying `limit`. */
   offset?: number;
-  /** PDF only: inclusive 1-based `[first, last]` page range to parse. */
+  /** Page-oriented formats (PDF pages, PPTX slides): inclusive 1-based `[first, last]` range to parse. */
   pages?: [number, number];
   /** Cooperative cap on in-parser work units (e.g. PDF operations) to bound CPU. */
   maxWorkUnits?: number;
   /**
-   * Return output→source provenance: `"page"` for page-level (PDF), `"off"`
-   * (default) for none. Output byte ranges in `provenance` index `markdown` as
-   * UTF-8; slice with `Buffer.from(markdown).subarray(start, end)`.
+   * Return output→source provenance: `"page"` for page/slide-level
+   * (PDF/PPTX), `"block"` for the finest available, `"off"` (default) for
+   * none. Output byte ranges in `provenance` index `markdown` as UTF-8;
+   * slice with `Buffer.from(markdown).subarray(start, end)`.
    */
   provenance?: string;
   /**
@@ -59,7 +60,10 @@ export type WarningCode =
   | 'pdf_multi_column_reading_order'
   | 'merged_table_structure_not_preserved'
   | 'embedded_visuals_omitted'
-  | 'vector_graphics_omitted';
+  | 'vector_graphics_omitted'
+  | 'pdf_repeated_region_deduplicated'
+  | 'slide_no_text_layer'
+  | 'hidden_slide_omitted';
 
 export interface SpoorWarning {
   code: WarningCode;
@@ -78,11 +82,13 @@ export interface AnchorRect { x0: number; y0: number; x1: number; y1: number }
 
 /**
  * Where a span of output came from: a PDF page (block level adds an
- * approximate box), a linear input byte range (plain text / Markdown), or a
- * table cell of the document-mode CSV/XLSX rendering.
+ * approximate box), a PPTX slide (1-based deck-order number), a linear input
+ * byte range (plain text / Markdown), or a table cell of the document-mode
+ * CSV/XLSX rendering.
  */
 export type SourceAnchor =
   | { kind: 'page'; number: number; bbox?: AnchorRect }
+  | { kind: 'slide'; number: number }
   | { kind: 'input'; start: number; end: number }
   | { kind: 'cell'; row: number; column: string; sheet?: string };
 
@@ -102,7 +108,7 @@ export interface ParseResult {
     input_bytes: number;
     output_bytes: number;
     format: string;
-    /** Total pages for page-oriented formats (PDF); absent otherwise. */
+    /** Total pages (PDF) or slides (PPTX); absent for other formats. */
     page_count?: number;
   };
   /** Output→source mapping when requested via `provenance`; absent otherwise. */

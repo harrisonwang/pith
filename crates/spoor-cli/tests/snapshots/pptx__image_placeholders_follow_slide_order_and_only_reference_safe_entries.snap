@@ -1,20 +1,21 @@
 ---
 source: crates/spoor-cli/tests/pptx.rs
-assertion_line: 78
 expression: out
 ---
 ## Slide 1
 
-Slide one
+### Slide one
 
-![PPTX image 1 (slide 1)](spoor://pptx/part/ppt/media/image1.png)
+![PPTX image 1 (slide 1): image.png](spoor://pptx/part/ppt/media/image1.png)
 
 ## Slide 2
 
-Slide two
+### Slide two
 
-![PPTX image 2 (slide 2)](spoor://pptx/part/ppt/media/image1.png)![PPTX image 3 (slide 2)](spoor://pptx/part/ppt/media/image2.png)
+![PPTX image 2 (slide 2): image.png](spoor://pptx/part/ppt/media/image1.png)
+
+![PPTX image 3 (slide 2): image.png](spoor://pptx/part/ppt/media/image2.png)
 
 ## Slide 3
 
-Slide three (no images)
+### Slide three (no images)

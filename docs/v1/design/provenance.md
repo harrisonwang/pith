@@ -1,6 +1,6 @@
 # 来源定位（Provenance）设计
 
-状态：**M1（PDF 页级）、M2（行级 + 坐标）、M3（线性格式与表格）均已落地**。本文记录已实现行为与剩余边界。
+状态：**M1（PDF 页级）、M2（行级 + 坐标）、M3（线性格式与表格）、M4（PPTX slide 级）均已落地**。本文记录已实现行为与剩余边界。
 
 ## 一句话
 
@@ -48,6 +48,10 @@ pub enum SourceAnchor {
     /// 页式格式（当前 PDF）：1-based 源页码；block 级下 born-digital 行
     /// 附近似包围盒（PDF 原生用户空间，y 向上，与 /MediaBox 同坐标系）。
     Page { number: usize, bbox: Option<Rect> },
+    /// 幻灯片格式（当前 PPTX）：1-based 放映顺序页码（sldIdLst 位置，与
+    /// PowerPoint 显示及 WarningLocation::Slide 一致）。slide 本身足够小，
+    /// slide 粒度已能把引用锚死，不产坐标。
+    Slide { number: usize },
     /// 线性格式（纯文本 / Markdown）：输出片段来自输入的哪个字节区间。
     Input { start: usize, end: usize },
     /// CSV/XLSX 文档模式渲染表的单元格：row 为渲染表 1-based 数据行，
@@ -73,7 +77,8 @@ pub enum SourceAnchor {
 | PDF | `Page { number, bbox }` | **页级与行级均已落地（M1+M2）**；bbox 来自字形几何（基线 ± 字号近似），仅 born-digital |
 | 纯文本 / Markdown | `Input { start, end }` | **已落地（M3）**：输出与输入逐字节相同时精确（page 级整篇一条、block 级按行铺满）；重编码输入（GBK 等）退化为整篇一条粗粒度映射，不猜逐行偏移 |
 | CSV / XLSX | `Cell { sheet, row, column }` | **已落地（M3）**：文档模式（Markdown 表）block 级逐数据单元格锚定；行号为渲染表数据行、列为表头文本；表头行与表格骨架不铺 span。注意 `parse` 自动分派对表格走 JSON 输出（无 markdown 可锚），Cell 锚点需走文档模式（Rust `parse_document_result` / CLI `--provenance block`） |
-| DOCX / PPTX / HTML / EPUB | — | 需要解析器保留段落/slide/元素序号，成本较高，更靠后 |
+| PPTX | `Slide { number }` | **已落地（M4）**：page 与 block 级均为逐 slide 一条 span（span 覆盖整个 `## Slide N` 区块含 notes）；编号为放映顺序（sldIdLst），隐藏页保号；`--pages` 切片时编号跟随源页。slide 即引用单元，不产 shape 坐标（Agent 校验引用只需"读第 N 页"，坐标是给人类 UI 的，成本收益不成立） |
+| DOCX / HTML / EPUB | — | 需要解析器保留段落/元素序号，成本较高，更靠后 |
 
 ## 开关与分级
 
@@ -117,6 +122,11 @@ pub struct ParseRequest<'a> {
 - CSV/XLSX 文档模式：block 级逐数据单元格 `Cell { sheet, row, column }`；`gfm_table_with_spans` 在渲染时逐格记录字节区间，零重复渲染逻辑。
 - `locate_quote_grounded` 对表格命中直接返回该单元格锚点（重叠最大者）。
 
+**M4 · PPTX slide 级 ✅ 已落地**
+- `SourceAnchor::Slide { number }`：page/block 级均为逐 slide 一条 span，拼接时记录偏移（PDF M1 同款零成本模式）；span 覆盖 `## Slide N` 标题到该页内容（含 speaker notes）结束，页间分隔符不归任何页。
+- 同批落地的 slide 契约件：`sldIdLst` 放映序（编号与 PowerPoint 一致，缺 presentation.xml 时确定性回退文件名序）、`--pages` 幻灯片切片（编号跟随源页、起始越界报错，与 PDF 同契约）、`stats.page_count`、隐藏页省略保号（`hidden_slide_omitted`）、无文本层姿态信号（`slide_no_text_layer`，区分备注有无）。
+- 刻意不做：shape 级 bbox / EMU 坐标 / shape id。slide 是足够小的引用单元，坐标只服务人类 UI 框选；等 answer-trace 出现真实需求再借 tagged enum 无破坏加字段。
+
 ## 确定性与边界
 
 - **确定性**：同输入字节 + 同 `ProvenanceLevel` → 同 `provenance`（可哈希、可缓存，呼应"内容寻址"方向）。
@@ -127,7 +137,7 @@ pub struct ParseRequest<'a> {
 ## 跨宿主暴露（已落地）
 
 - core：`ParseResult.provenance` + `ParseRequest.provenance`（`ProvenanceLevel`）。
-- CLI：`--provenance page|block`（默认 off）。开启时 stdout 输出整个 `ParseResult` 的 JSON（含 markdown 与 provenance），**仅支持单个文档型输入**（偏移针对单份 markdown）；与 `--mode`、`--extract` 互斥；表格型报友好错误。仍受 `--max-output-kib` 约束（超限报错而非截断，避免破坏 JSON）。
+- CLI：`--provenance page|block`（默认 off）。开启时 stdout 输出整个 `ParseResult` 的 JSON（含 markdown 与 provenance），**仅支持单个文档型输入**（偏移针对单份 markdown）；支持 PDF / PPTX / 纯文本 / Markdown / CSV / XLSX，其余格式报友好错误；与 `--mode`、`--extract` 互斥。仍受 `--max-output-kib` 约束（超限报错而非截断，避免破坏 JSON）。
 - Python / Node / WASM：`parse_*` 增加 `provenance` 选项（字符串 `"page"`/`"block"`），返回结构带 `provenance`；只有开启时才序列化，规避边界税。绑定层把整份 `ParseResult` 直接序列化，因此 provenance 自动透传。
 
 ## 已定决策

@@ -1,0 +1,15 @@
+---
+source: crates/spoor-cli/tests/pptx.rs
+expression: out
+---
+## Slide 1
+
+### Numbers live in the chart
+
+Chart: Quarterly performance
+
+|  | Revenue | Cost |
+| --- | --- | --- |
+| Q1 | 100 | 80 |
+| Q2 | 120 | 90 |
+| Q3 | 140 | 95 |

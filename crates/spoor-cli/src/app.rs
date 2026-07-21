@@ -55,16 +55,21 @@ fn run_provenance(cli: Cli) -> Result<String> {
     request.provenance = level;
 
     let format = detect_format(&request)?;
-    // Provenance exists for PDF (page/line anchors), linear formats (input
-    // byte ranges) and tables (cell anchors, block level). Reflowable
-    // documents (DOCX/PPTX/HTML/EPUB/IPYNB) have no mapping yet and get one
-    // clear error instead of silently returning none.
+    // Provenance exists for PDF (page/line anchors), PPTX (slide anchors),
+    // linear formats (input byte ranges) and tables (cell anchors, block
+    // level). Reflowable documents (DOCX/HTML/EPUB/IPYNB) have no mapping yet
+    // and get one clear error instead of silently returning none.
     if !matches!(
         format,
-        Format::Pdf | Format::PlainText | Format::Markdown | Format::Csv | Format::Xlsx
+        Format::Pdf
+            | Format::Pptx
+            | Format::PlainText
+            | Format::Markdown
+            | Format::Csv
+            | Format::Xlsx
     ) {
         return Err(anyhow!(
-            "--provenance 支持 PDF（页/行级）、纯文本/Markdown（输入区间）与 CSV/XLSX（单元格，仅 block）；当前格式为 {format}。"
+            "--provenance 支持 PDF（页/行级）、PPTX（slide 级）、纯文本/Markdown（输入区间）与 CSV/XLSX（单元格，仅 block）；当前格式为 {format}。"
         ));
     }
 
@@ -141,11 +146,16 @@ fn run_parse(cli: Cli) -> Result<String> {
 
     let formats: Vec<_> = resolved.iter().map(|resolved| resolved.format).collect();
 
-    // --pages is honored only by PDF (page-oriented). On any other format it is a
-    // silent no-op, so warn — mirroring how md mode flags ignored table options,
-    // so the agent never assumes a slice was applied when it was not.
-    if cli.pages.is_some() && formats.iter().any(|format| !matches!(format, Format::Pdf)) {
-        eprintln!("warning: --pages 仅对 PDF 按页生效，其他格式已忽略");
+    // --pages is honored by the page-oriented formats (PDF pages, PPTX
+    // slides). On any other format it is a silent no-op, so warn — mirroring
+    // how md mode flags ignored table options, so the agent never assumes a
+    // slice was applied when it was not.
+    if cli.pages.is_some()
+        && formats
+            .iter()
+            .any(|format| !matches!(format, Format::Pdf | Format::Pptx))
+    {
+        eprintln!("warning: --pages 仅对 PDF（页）和 PPTX（幻灯片）生效，其他格式已忽略");
     }
 
     let mode = cli
@@ -160,6 +170,7 @@ fn run_parse(cli: Cli) -> Result<String> {
             let mut parse_warnings = Vec::new();
             let mut extracted_bytes = 0usize;
             let mut total_pdf_pages = 0usize;
+            let mut total_slides = 0usize;
             for resolved in &resolved {
                 let request = request_for(
                     &resolved.input,
@@ -196,7 +207,10 @@ fn run_parse(cli: Cli) -> Result<String> {
                                     warning,
                                 }
                             }));
-                            total_pdf_pages += page_count.unwrap_or(0);
+                            match resolved.format {
+                                Format::Pptx => total_slides += page_count.unwrap_or(0),
+                                _ => total_pdf_pages += page_count.unwrap_or(0),
+                            }
                             documents.push(document);
                         }
                     }
@@ -241,6 +255,29 @@ fn run_parse(cli: Cli) -> Result<String> {
                 } else if shown < total_pdf_pages {
                     eprintln!(
                         "info: PDF 共 {total_pdf_pages} 页，本次为其中约 {shown} 页；用 --pages <start,end> 获取其他页面。"
+                    );
+                }
+            }
+            if total_slides > 0 {
+                // Count exact heading lines (`## Slide <digits>`), the only
+                // shape the renderer emits — a body paragraph that merely
+                // starts with the words "## Slide" must not inflate the tally.
+                let shown = limited
+                    .content
+                    .lines()
+                    .filter(|line| {
+                        line.strip_prefix("## Slide ").is_some_and(|rest| {
+                            !rest.is_empty() && rest.bytes().all(|b| b.is_ascii_digit())
+                        })
+                    })
+                    .count();
+                if limited.warning.is_some() {
+                    eprintln!(
+                        "warning: 演示文稿共 {total_slides} 张幻灯片，本次输出截断到约 {shown} 张；用 --pages <start,end> 获取后续幻灯片。"
+                    );
+                } else if shown < total_slides {
+                    eprintln!(
+                        "info: 演示文稿共 {total_slides} 张幻灯片，本次为其中 {shown} 张；用 --pages <start,end> 获取其他幻灯片。"
                     );
                 }
             }

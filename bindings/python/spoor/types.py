@@ -10,6 +10,9 @@ WarningCode = Literal[
     "merged_table_structure_not_preserved",
     "embedded_visuals_omitted",
     "vector_graphics_omitted",
+    "pdf_repeated_region_deduplicated",
+    "slide_no_text_layer",
+    "hidden_slide_omitted",
 ]
 
 
@@ -108,6 +111,13 @@ class PageAnchor(TypedDict):
     bbox: NotRequired[Rect]
 
 
+class SlideAnchor(TypedDict):
+    """Slide-oriented source (PPTX): 1-based deck-order slide number."""
+
+    kind: Literal["slide"]
+    number: int
+
+
 class InputAnchor(TypedDict):
     """Linear source (plain text / Markdown): input byte range."""
 
@@ -125,7 +135,7 @@ class CellAnchor(TypedDict):
     sheet: NotRequired[str]
 
 
-SourceAnchor = PageAnchor | InputAnchor | CellAnchor
+SourceAnchor = PageAnchor | SlideAnchor | InputAnchor | CellAnchor
 
 
 class ProvenanceSpan(TypedDict):

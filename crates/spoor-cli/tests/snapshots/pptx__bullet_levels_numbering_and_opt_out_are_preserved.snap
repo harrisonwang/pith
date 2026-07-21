@@ -1,0 +1,14 @@
+---
+source: crates/spoor-cli/tests/pptx.rs
+expression: out
+---
+## Slide 1
+
+### Bulleted body
+
+- Level zero
+    - Level one
+        - Level two
+1. Numbered item
+
+No bullet here

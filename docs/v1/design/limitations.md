@@ -1,6 +1,6 @@
 # 能力与限制
 
-本文是 spoor `v0.12.0` 的能力边界。它描述代码当前实际行为，而不是未来路线图。
+本文是 spoor `v0.13.0` 的能力边界。它描述代码当前实际行为，而不是未来路线图。
 
 ## 总体资源限制
 
@@ -27,7 +27,7 @@
 | DOCX | 标题 1-6、段落、粗体/斜体、列表、小型 GFM 表格、链接、脚注、Unicode、插入型 tracked changes；内嵌栅格图片以安全 `spoor://docx/part/word/media/*` 占位符保留正文位置，CLI 可通过 `--extract` 提取单个占位符资源；合并表格/视觉对象会返回 warning | 不理解或批量导出图片；不保留样式与版式、删除型 tracked changes、comments/endnotes、复杂编号重启、复杂合并表格、图表与嵌入对象 |
 | XLSX | sheet、range、标题/表头/preamble、文本/数字/布尔/日期、缓存公式结果、错误单元格、合并单元格左上值 | 默认每个 sheet 仅前 100 条数据行；不计算公式、不保留公式表达式/样式/图表；Excel 1904 date system 尚未完整处理；一个 sheet 按一个逻辑 table 输出 |
 | PDF | text layer、页顺序、`## Page N` 边界、`--pages` 页码区间、`stats.page_count` 总页数（不随切片变化）；`--provenance page` 返回每页"输出字节区间 → 源页码"的来源定位映射，`--provenance block` 细到行级并为 born-digital 行附 PDF 原生坐标包围盒（近似字形范围；被改写/几何不可信的字节退回页级锚定）；对清晰双栏版面基于字形几何重排阅读顺序并返回 `pdf_multi_column_reading_order` warning（保守、可回退）；outline 书签标题恰为页内整行时提升为 Markdown 标题（###起、封顶 h6，找不到不伪造）；URI 链接注解就地织入 `[锚文本](url)`，无法定位锚点时页尾 `<url>` 兜底，仅放行 http/https/mailto；跨页重复页眉/页脚默认去重（保留首现，`pdf_repeated_region_deduplicated` warning 注明移除内容，`keep_repeated_regions` 可关闭）；行尾断词保守重合（小写-小写才合并，复合词保留连字符，软连字符清除）；混合文档的无文本页与明显可疑文本层返回带页码 warning | 默认解析全部页；不做 OCR；无 outline 时不推断标题；GoTo 内部链接不输出；来源定位坐标为近似包围盒且仅 born-digital（扫描件无坐标）；多于两栏或复杂版面不保证阅读顺序（保守判定为单栏，回退原始顺序）；断词不跨段落/跨页；无文本且无图片的 PDF（空白/纯矢量）与加密 PDF 返回结构化错误 |
-| PPTX | 按数字 slide 顺序输出文本、小型表格、speaker notes；内嵌栅格图片以安全 `spoor://pptx/part/ppt/media/*` 占位符保留正文位置，CLI 可通过 `--extract` 提取单个占位符资源；合并表格/视觉对象省略会返回带 slide 位置 warning | 不按 shape 坐标恢复视觉阅读顺序；不保留 bullet 层级、主题、动画、图表或嵌入对象 |
+| PPTX | 按放映顺序（`presentation.xml` 的 `sldIdLst`，缺失/损坏时确定性回退文件名数字序）输出 `## Slide N`，编号与 PowerPoint 显示一致；shape 级结构感知：title/ctrTitle 占位符 → `###` 标题并置顶，其余 shape 按几何 (top,left) 稳定排序恢复阅读顺序（无坐标回退 XML 序），group 展平、组内按局部坐标排序；body/obj 占位符段落按 PowerPoint 模板语义输出 bullet 列表（`lvl` 嵌套、`buAutoNum` 编号、`buNone` 退回正文）；图片占位符附经消毒的 `cNvPr@descr` alt 文本；notes 过滤 `sldNum/dt/ftr/hdr/sldImg` 模板占位符；`--pages` 幻灯片区间与 `stats.page_count` 总页数（不随切片变化）；`--provenance page\|block` 返回每张幻灯片"输出字节区间 → slide 编号"锚点（slide 即引用单元，不产坐标）；隐藏幻灯片（`show="0"`）正文省略、页码保留并返回 `hidden_slide_omitted`；正文零文本且含视觉对象（位图/图表/SmartArt/OLE）的页返回 `slide_no_text_layer`（区分演讲者备注有无）；内嵌栅格图片以安全 `spoor://pptx/part/ppt/media/*` 占位符保留正文位置，CLI 可通过 `--extract` 提取单个占位符资源；合并表格/视觉对象省略会返回带 slide 位置 warning；图表缓存数据（c:cat/c:val 系列）渲成带标题的表格（>100 点或 >12 系列时截断并附 note）、SmartArt 节点文本（`dgm:t`）渲成列表——解构完整的页不再报 visuals warning，未能解构（OLE/引用缺失）仍报"未能解构"warning | 多栏并列版式纯 (top,left) 排序仍可能交错（无行带聚簇）；不保留主题、动画、字符样式；图表不计算公式、不保留视觉属性，scatter 以 xVal/yVal 对应类目/数值；SmartArt 不重建图形关系（层级/连接线）；placeholder 几何继承链（layout/master）不解析，无坐标占位符排在最前；母版/版式层显式 buNone 的内容占位符仍按默认加 bullet 标记（不读母版样式链，标记是呈现层语义、文本无损失）；跨多个列表项的引文在 locate 空白不敏感层可能因列表标记无法命中（单项内引文不受影响，待 Locator 层跟进）；有序列表编号统一 `1.`（不读 startAt，Markdown 渲染器自行重编号） |
 | HTML / URL | 优先 `article`、其次 `main`、最后 `body`；标题、段落、列表、链接、表格、引用块、代码块、image alt、粗体/斜体；跳过常见导航与脚本噪声 | 不是完整 readability 引擎；不解析相对链接；caption 与嵌套列表仍有限；core 不抓 URL，只有 CLI 会发起网络请求 |
 | EPUB | OPF spine 阅读顺序、章节边界，并复用 HTML Markdown renderer | 不处理 DRM、固定版式视觉结构、图片/音视频、复杂导航与 CSS 布局 |
 | IPYNB | markdown cell、code cell、cell 顺序、kernelspec language hint | 从不执行代码；跳过 raw cell、outputs、widgets、HTML output 与 base64 图片 |
@@ -100,7 +100,7 @@ Cloudflare 官方当前还限制 Worker 压缩后体积为 Free 3 MB / Paid 10 M
 
 近期最值得增强的不是继续增加格式数量，而是：
 
-1. 在已落地的 PDF 页级来源定位之上，做块级来源定位（段落 `bbox`），再扩展到纯文本/表格的输入区间与单元格锚点；OCR 保持外置。
+1. ~~在已落地的 PDF 页级来源定位之上，做块级来源定位（段落 `bbox`），再扩展到纯文本/表格的输入区间与单元格锚点~~（已落地：PDF 行级 + bbox、纯文本/Markdown 输入区间、CSV/XLSX 单元格、PPTX slide 级；剩余为 DOCX/HTML/EPUB 的块级锚点）；OCR 保持外置。
 2. ~~在已落地的 PDF 布局中间模型与双栏阅读顺序之上，继续做页眉页脚分类、标题层级与断词修复~~（已落地：outline 标题、URI 链接、页眉页脚去重与保留选项、行尾断词；剩余为无 outline 的标题推断与复杂表格结构）。
 3. 建立 DOCX/PPTX 表格 span 模型，把合并表格从“显式 warning”升级为 HTML 降级输出。
 4. 为 PPTX 按 shape 坐标恢复阅读顺序并保留 bullet 层级。

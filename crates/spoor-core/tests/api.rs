@@ -284,6 +284,91 @@ fn page_provenance_maps_linear_formats_to_one_input_span() {
 }
 
 #[test]
+fn slide_provenance_tiles_output_with_slide_anchors() {
+    use spoor_core::SourceAnchor;
+    // 01_basic.pptx has 2 slides. Page and Block levels both mean "one span
+    // per slide": a slide is a small enough citation unit that no finer
+    // geometry is needed. Spans start at each `## Slide N` heading and stay
+    // in ascending, non-overlapping order.
+    let bytes = include_bytes!("../../spoor-cli/tests/fixtures/pptx/01_basic.pptx");
+    for level in [ProvenanceLevel::Page, ProvenanceLevel::Block] {
+        let mut request = ParseRequest::new(bytes);
+        request.source_name = Some("deck.pptx");
+        request.provenance = level;
+        let result = parse(&request).unwrap();
+        let ParseContent::Document(document) = &result.content else {
+            panic!("expected document output");
+        };
+        let spans = &result.provenance.as_ref().expect("slide provenance").spans;
+        assert_eq!(spans.len(), 2);
+        let mut previous_end = 0usize;
+        for (index, span) in spans.iter().enumerate() {
+            let number = index + 1;
+            assert_eq!(span.source, SourceAnchor::Slide { number });
+            assert!(span.output.start >= previous_end);
+            let text = &document.markdown[span.output.start..span.output.end];
+            assert!(
+                text.starts_with(&format!("## Slide {number}")),
+                "span must start at its heading, got {text:?}"
+            );
+            previous_end = span.output.end;
+        }
+        assert_eq!(result.stats.page_count, Some(2));
+    }
+}
+
+#[test]
+fn slide_narrowing_follows_source_numbers_and_reports_full_count() {
+    use spoor_core::SourceAnchor;
+    // 05_ordering.pptx has 12 slides. A 2:3 slice keeps source numbering
+    // (`## Slide 2`, `## Slide 3`) and stats still report the full deck, the
+    // same contract as PDF's --pages.
+    let bytes = include_bytes!("../../spoor-cli/tests/fixtures/pptx/05_ordering.pptx");
+    let mut request = ParseRequest::new(bytes);
+    request.source_name = Some("deck.pptx");
+    request.document_filter = DocumentFilter::build(Some((2, 3))).unwrap();
+    request.provenance = ProvenanceLevel::Page;
+    let result = parse(&request).unwrap();
+    let ParseContent::Document(document) = &result.content else {
+        panic!("expected document output");
+    };
+    assert!(document.markdown.contains("## Slide 2"));
+    assert!(document.markdown.contains("## Slide 3"));
+    assert!(!document.markdown.contains("## Slide 1"));
+    assert!(!document.markdown.contains("## Slide 4"));
+    assert_eq!(result.stats.page_count, Some(12));
+    let spans = result.provenance.expect("slide provenance").spans;
+    assert_eq!(spans.len(), 2);
+    assert_eq!(spans[0].source, SourceAnchor::Slide { number: 2 });
+    assert_eq!(spans[1].source, SourceAnchor::Slide { number: 3 });
+
+    // A slice starting past the deck is a structured error, mirroring PDF.
+    let mut over = ParseRequest::new(bytes);
+    over.source_name = Some("deck.pptx");
+    over.document_filter = DocumentFilter::build(Some((99, 100))).unwrap();
+    assert_eq!(parse(&over).unwrap_err().code, ErrorCode::ParseFailed);
+}
+
+#[test]
+fn locate_quote_grounds_a_pptx_citation_to_its_slide() {
+    use spoor_core::SourceAnchor;
+    // End to end: an agent quotes bullet text; grounded locate resolves it to
+    // the slide it came from, mechanically.
+    let bytes = include_bytes!("../../spoor-cli/tests/fixtures/pptx/01_basic.pptx");
+    let mut request = ParseRequest::new(bytes);
+    request.source_name = Some("deck.pptx");
+    request.provenance = ProvenanceLevel::Block;
+    let result = parse(&request).unwrap();
+    let ParseContent::Document(document) = &result.content else {
+        panic!("expected document output");
+    };
+    let spans = &result.provenance.as_ref().expect("provenance").spans;
+    let grounded = spoor_core::locate_quote_grounded(&document.markdown, "Second bullet", spans)
+        .expect("verbatim bullet located");
+    assert_eq!(grounded.anchor, Some(SourceAnchor::Slide { number: 2 }));
+}
+
+#[test]
 fn page_provenance_is_empty_for_reflowable_formats() {
     // Reflowable documents (DOCX etc.) still have no mapping; requesting one
     // yields none rather than a bogus anchor. HTML has no linear identity.

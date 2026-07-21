@@ -1,0 +1,13 @@
+---
+source: crates/spoor-cli/tests/pptx.rs
+expression: out
+---
+## Slide 1
+
+### Visible one
+
+## Slide 2
+
+## Slide 3
+
+### Visible three

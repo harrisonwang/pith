@@ -1,51 +1,51 @@
 ---
-source: tests/pptx.rs
+source: crates/spoor-cli/tests/pptx.rs
 expression: out
 ---
 ## Slide 1
 
-Slide number 1
+### Slide number 1
 
 ## Slide 2
 
-Slide number 2
+### Slide number 2
 
 ## Slide 3
 
-Slide number 3
+### Slide number 3
 
 ## Slide 4
 
-Slide number 4
+### Slide number 4
 
 ## Slide 5
 
-Slide number 5
+### Slide number 5
 
 ## Slide 6
 
-Slide number 6
+### Slide number 6
 
 ## Slide 7
 
-Slide number 7
+### Slide number 7
 
 ## Slide 8
 
-Slide number 8
+### Slide number 8
 
 ## Slide 9
 
-Slide number 9
+### Slide number 9
 
 ## Slide 10
 
-Slide number 10
+### Slide number 10
 
 ## Slide 11
 
-Slide number 11
+### Slide number 11
 
 ## Slide 12
 
-Slide number 12
+### Slide number 12

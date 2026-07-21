@@ -40,7 +40,7 @@ export interface ParseOptions {
   limit?: number
   /** Skip this many data rows before applying `limit`. */
   offset?: number
-  /** PDF only: inclusive 1-based `[first, last]` page range to parse. */
+  /** Page-oriented formats (PDF pages, PPTX slides): inclusive 1-based `[first, last]` range to parse. */
   pages?: Array<number>
   /**
    * Cooperative cap on in-parser work units (e.g. PDF operations) to bound

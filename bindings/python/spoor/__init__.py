@@ -64,7 +64,7 @@ def parse_bytes(
     For table formats (CSV/XLSX) the narrowing options mirror the CLI: ``sheet``
     (XLSX only), ``rows`` as an inclusive 1-based ``(first, last)`` pair (mutually
     exclusive with ``limit``/``offset``), ``columns`` to keep, and
-    ``limit``/``offset`` for pagination. For page-oriented formats (PDF), ``pages``
+    ``limit``/``offset`` for pagination. For page-oriented formats (PDF pages, PPTX slides), ``pages``
     is an inclusive 1-based ``(first, last)`` range that limits which pages are
     parsed. Each option is ignored by formats it does not apply to.
 

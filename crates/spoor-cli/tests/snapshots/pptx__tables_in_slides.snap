@@ -1,10 +1,10 @@
 ---
-source: tests/pptx.rs
+source: crates/spoor-cli/tests/pptx.rs
 expression: out
 ---
 ## Slide 1
 
-Has a Table
+### Has a Table
 
 | Header A | Header B |
 | --- | --- |
